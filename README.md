@@ -588,5 +588,5 @@ El crawler trata los `4xx` (distinto de `429`) como "no disponible" y continúa.
 | Dependencias rotas | Baja | Alto | Lockfile `uv.lock`, versiones pinneadas |
 
 ---
-
+Realizado por: Jhonatan, Nicolas, Mateo y Jorge
 *Versión: 1.0 — Abril 2026*
