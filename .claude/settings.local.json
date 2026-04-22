@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv run:*)",
+      "Bash(wc -l knowledge/**/*.md)",
+      "Bash(awk -F/ '{print $\\(NF-1\\)\"/\"$NF}')",
+      "Bash(uv sync:*)",
+      "Bash(python -c ':*)",
+      "Bash(pip show:*)",
+      "Bash(pip install:*)",
+      "Bash(C:/Users/USER/AppData/Local/Python/pythoncore-3.14-64/python.exe -m pip install pypdf -q)",
+      "Bash(C:/Users/USER/AppData/Local/Python/pythoncore-3.14-64/python.exe -c ':*)"
+    ]
+  }
+}
