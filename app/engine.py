@@ -1,11 +1,15 @@
 from __future__ import annotations
 
-import ollama
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import Runnable
+from langchain_ollama import ChatOllama
 
 _MODEL = "llama3.2:1b"
+_NUM_CTX = 32768  # 32k tokens ≈ 110k chars (~25 docs) — máximo para 5.9 GB RAM
 
 # ---------------------------------------------------------------------------
-# Prompts
+# Prompts — zero-shot con instrucciones anti-alucinación
 # ---------------------------------------------------------------------------
 
 _SYSTEM_QA = """\
@@ -51,7 +55,7 @@ frecuentes que un paciente, familiar o visitante haría a la Fundación Valle de
 con sus respuestas detalladas y verídicas.
 
 Formato obligatorio para cada ítem:
-**P1: [Pregunta]**
+**P{{n}}: [Pregunta]**
 R: [Respuesta basada en el contexto]
 
 Cubre variedad de temas: servicios, contacto, sedes, especialidades, procesos \
@@ -64,46 +68,40 @@ CONTEXTO DE CONOCIMIENTO:
 """
 
 # ---------------------------------------------------------------------------
+# Prompt templates (LangChain)
+# ---------------------------------------------------------------------------
+
+_QA_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        ("system", _SYSTEM_QA),
+        ("human", "{question}"),
+    ]
+)
+
+_SUMMARY_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        ("system", _SYSTEM_SUMMARY),
+        ("human", "Genera el resumen ejecutivo completo de la Fundación Valle del Lili."),
+    ]
+)
+
+_FAQ_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        ("system", _SYSTEM_FAQ),
+        ("human", "Genera las 20 preguntas frecuentes más importantes con sus respuestas."),
+    ]
+)
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
-_OPTIONS_QA = {"num_ctx": 4096, "num_predict": 512, "temperature": 0.1}
-_OPTIONS_LONG = {"num_ctx": 8192, "num_predict": 2048, "temperature": 0.1}
 
-
-def stream_answer(context: str, question: str, model: str = _MODEL):
-    """Yields text chunks for real-time streaming in the UI."""
-    for chunk in ollama.chat(
-        model=model,
-        messages=[
-            {"role": "system", "content": _SYSTEM_QA.format(context=context)},
-            {"role": "user", "content": question},
-        ],
-        options=_OPTIONS_QA,
-        stream=True,
-    ):
-        yield chunk.message.content
-
-
-def generate_summary(context: str, model: str = _MODEL) -> str:
-    response = ollama.chat(
-        model=model,
-        messages=[
-            {"role": "system", "content": _SYSTEM_SUMMARY.format(context=context)},
-            {"role": "user", "content": "Genera el resumen ejecutivo completo de la Fundación Valle del Lili."},
-        ],
-        options=_OPTIONS_LONG,
-    )
-    return response.message.content
-
-
-def generate_faq(context: str, model: str = _MODEL) -> str:
-    response = ollama.chat(
-        model=model,
-        messages=[
-            {"role": "system", "content": _SYSTEM_FAQ.format(context=context)},
-            {"role": "user", "content": "Genera las 20 preguntas frecuentes más importantes con sus respuestas."},
-        ],
-        options=_OPTIONS_LONG,
-    )
-    return response.message.content
+def build_chains(model: str = _MODEL, num_ctx: int = _NUM_CTX) -> dict[str, Runnable]:
+    llm = ChatOllama(model=model, num_ctx=num_ctx)
+    parser = StrOutputParser()
+    return {
+        "qa": _QA_PROMPT | llm | parser,
+        "summary": _SUMMARY_PROMPT | llm | parser,
+        "faq": _FAQ_PROMPT | llm | parser,
+    }

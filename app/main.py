@@ -7,10 +7,10 @@ _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-import streamlit as st
+import streamlit as st  # noqa: E402
 
-from app.engine import generate_faq, generate_summary, stream_answer
-from app.retriever import Retriever, build_retriever
+from app.engine import build_chains  # noqa: E402
+from app.knowledge_loader import load_knowledge_base  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Page config
@@ -28,16 +28,23 @@ st.set_page_config(
 # ---------------------------------------------------------------------------
 
 KNOWLEDGE_DIR = _ROOT / "knowledge"
-CHROMA_DIR = _ROOT / ".chroma"
 
 
-@st.cache_resource(show_spinner="Indexando base de conocimiento…")
-def get_retriever() -> Retriever:
-    return build_retriever(KNOWLEDGE_DIR, CHROMA_DIR)
+@st.cache_resource(show_spinner="Cargando base de conocimiento…")
+def get_knowledge() -> tuple[str, dict]:
+    return load_knowledge_base(KNOWLEDGE_DIR)
 
 
-retriever = get_retriever()
-stats = retriever.stats()
+@st.cache_resource(show_spinner="Inicializando modelo…")
+def get_chains() -> dict:
+    return build_chains()
+
+
+_MAX_CONTEXT_CHARS = 80_000  # ~23k tokens — deja ~9k tokens libres para respuesta dentro de 32k ctx
+
+context_full, stats = get_knowledge()
+context = context_full[:_MAX_CONTEXT_CHARS]
+chains = get_chains()
 
 # ---------------------------------------------------------------------------
 # Sidebar — estadísticas del knowledge base
@@ -49,7 +56,7 @@ with st.sidebar:
         width="stretch",
     )
     st.markdown("## 📚 Base de Conocimiento")
-    st.metric("Documentos indexados", stats["total_documents"])
+    st.metric("Documentos cargados", stats["total_documents"])
     st.metric("Caracteres en contexto", f"{stats['estimated_chars']:,}")
     st.divider()
     st.markdown("### Categorías")
@@ -72,7 +79,7 @@ with st.sidebar:
                 st.caption(f"• {doc}")
     st.divider()
     st.caption("Módulo 1 — Capa Semántica FVL")
-    st.caption("Modelo: llama3.2 (Ollama) · RAG semántico")
+    st.caption("Modelo: llama3.2:1b (Ollama) · Contexto completo")
 
 # ---------------------------------------------------------------------------
 # Main area
@@ -106,26 +113,24 @@ with tab_qa:
 
     col1, col2 = st.columns([1, 5])
     with col1:
-        ask = st.button("Consultar", type="primary", width="stretch")
+        ask = st.button("Consultar", type="primary", use_container_width=True)
 
     if ask and question.strip():
-        with st.spinner("Buscando documentos relevantes…"):
-            context = retriever.retrieve(question, k=5)
         st.markdown("---")
         st.markdown(f"**Pregunta:** {question}")
         st.markdown("**Respuesta:**")
         placeholder = st.empty()
-        answer = ""
+        full_answer = ""
         try:
-            for chunk in stream_answer(context, question):
-                answer += chunk
-                placeholder.markdown(answer + "▌")
-            placeholder.markdown(answer)
+            for chunk in chains["qa"].stream({"context": context, "question": question}):
+                full_answer += chunk
+                placeholder.markdown(full_answer + "▌")
+            placeholder.markdown(full_answer or "_Sin respuesta — el modelo no generó texto._")
         except Exception as e:
-            st.error(f"Error al invocar el modelo: {e}")
-        if answer:
+            placeholder.error(f"Error del modelo: {e}")
+        if full_answer:
             st.session_state["last_qa_question"] = question
-            st.session_state["last_qa_answer"] = answer
+            st.session_state["last_qa_answer"] = full_answer
 
     elif "last_qa_answer" in st.session_state:
         st.markdown("---")
@@ -160,22 +165,24 @@ with tab_summary:
     st.subheader("Resumen Ejecutivo de la Institución")
     st.markdown(
         "Genera un resumen estructurado de la Fundación Valle del Lili "
-        "a partir de los documentos más representativos indexados."
+        "a partir de todos los documentos indexados."
     )
 
     if st.button("Generar Resumen Ejecutivo", type="primary"):
-        with st.spinner("Seleccionando documentos representativos…"):
-            broad_context = retriever.retrieve_broad(k=20)
-        with st.spinner("Redactando resumen… (puede tardar 1–2 min)"):
-            try:
-                summary = generate_summary(broad_context)
-            except Exception as e:
-                st.error(f"Error al invocar el modelo: {e}")
-                summary = None
-        if summary:
-            st.session_state["summary"] = summary
+        st.markdown("---")
+        placeholder = st.empty()
+        full_summary = ""
+        try:
+            for chunk in chains["summary"].stream({"context": context}):
+                full_summary += chunk
+                placeholder.markdown(full_summary + "▌")
+            placeholder.markdown(full_summary or "_Sin respuesta — el modelo no generó texto._")
+        except Exception as e:
+            placeholder.error(f"Error del modelo: {e}")
+        if full_summary:
+            st.session_state["summary"] = full_summary
 
-    if "summary" in st.session_state:
+    elif "summary" in st.session_state:
         st.markdown("---")
         st.markdown(st.session_state["summary"])
         st.download_button(
@@ -197,18 +204,20 @@ with tab_faq:
     )
 
     if st.button("Generar FAQ", type="primary"):
-        with st.spinner("Seleccionando documentos representativos…"):
-            broad_context = retriever.retrieve_broad(k=20)
-        with st.spinner("Generando preguntas frecuentes… (puede tardar 1–2 min)"):
-            try:
-                faq = generate_faq(broad_context)
-            except Exception as e:
-                st.error(f"Error al invocar el modelo: {e}")
-                faq = None
-        if faq:
-            st.session_state["faq"] = faq
+        st.markdown("---")
+        placeholder = st.empty()
+        full_faq = ""
+        try:
+            for chunk in chains["faq"].stream({"context": context}):
+                full_faq += chunk
+                placeholder.markdown(full_faq + "▌")
+            placeholder.markdown(full_faq or "_Sin respuesta — el modelo no generó texto._")
+        except Exception as e:
+            placeholder.error(f"Error del modelo: {e}")
+        if full_faq:
+            st.session_state["faq"] = full_faq
 
-    if "faq" in st.session_state:
+    elif "faq" in st.session_state:
         st.markdown("---")
         st.markdown(st.session_state["faq"])
         st.download_button(
