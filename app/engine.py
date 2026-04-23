@@ -6,7 +6,7 @@ from langchain_core.runnables import Runnable
 from langchain_ollama import ChatOllama
 
 _MODEL = "llama3.2:1b"
-_NUM_CTX = 32768  # 32k tokens ≈ 110k chars (~25 docs) — máximo para 5.9 GB RAM
+_NUM_CTX = 16384  # 16k tokens — más rápido en CPU, deja ~5k tokens para respuesta
 
 # ---------------------------------------------------------------------------
 # Prompts — zero-shot con instrucciones anti-alucinación

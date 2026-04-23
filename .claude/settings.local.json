@@ -9,7 +9,10 @@
       "Bash(pip show:*)",
       "Bash(pip install:*)",
       "Bash(C:/Users/USER/AppData/Local/Python/pythoncore-3.14-64/python.exe -m pip install pypdf -q)",
-      "Bash(C:/Users/USER/AppData/Local/Python/pythoncore-3.14-64/python.exe -c ':*)"
+      "Bash(C:/Users/USER/AppData/Local/Python/pythoncore-3.14-64/python.exe -c ':*)",
+      "Bash(ollama ps *)",
+      "Bash(nvidia-smi)",
+      "Bash(ollama --version)"
     ]
   }
 }

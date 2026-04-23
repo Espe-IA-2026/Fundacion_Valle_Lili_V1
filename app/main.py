@@ -40,7 +40,7 @@ def get_chains() -> dict:
     return build_chains()
 
 
-_MAX_CONTEXT_CHARS = 80_000  # ~23k tokens — deja ~9k tokens libres para respuesta dentro de 32k ctx
+_MAX_CONTEXT_CHARS = 38_000  # ~11k tokens — deja ~5k tokens para respuesta dentro de 16k ctx
 
 context_full, stats = get_knowledge()
 context = context_full[:_MAX_CONTEXT_CHARS]
@@ -79,7 +79,7 @@ with st.sidebar:
                 st.caption(f"• {doc}")
     st.divider()
     st.caption("Módulo 1 — Capa Semántica FVL")
-    st.caption("Modelo: llama3.2:1b (Ollama) · Contexto completo")
+    st.caption("Modelo: llama3.2:1b (Ollama) · Contexto 38k chars")
 
 # ---------------------------------------------------------------------------
 # Main area
