@@ -1,0 +1,33 @@
+name: "Datos / KB (limpieza + chunking)"
+description: "Normalización, chunking, validación y estadísticas."
+title: "M1-3: "
+labels: ["type:data"]
+body:
+  - type: input
+    id: owner
+    attributes:
+      label: Responsable (branch)
+      placeholder: "Nicolas / Jhonatan / Mateo / Jorge"
+    validations:
+      required: true
+  - type: textarea
+    id: decisions
+    attributes:
+      label: Decisiones de datos
+      placeholder: |
+        - tamaño de chunk / solapamiento
+        - deduplicación
+        - formato final (md/jsonl)
+    validations:
+      required: true
+  - type: textarea
+    id: dod
+    attributes:
+      label: Definition of Done (DoD)
+      value: |
+        - [ ] KB final en `knowledge/` lista para cargar desde `app/knowledge_loader.py`
+        - [ ] Stats de KB en `docs/kb_stats.md`
+        - [ ] Validaciones (schemas/tests) pasan: `uv run pytest`
+    validations:
+      required: true
+

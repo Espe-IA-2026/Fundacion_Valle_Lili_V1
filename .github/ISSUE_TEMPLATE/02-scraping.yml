@@ -1,0 +1,43 @@
+name: "Scraping / extracción"
+description: "Crawler, extracción HTML, trazabilidad y guardrails."
+title: "M1-2: "
+labels: ["type:scraping"]
+body:
+  - type: input
+    id: owner
+    attributes:
+      label: Responsable (branch)
+      placeholder: "Nicolas / Jhonatan / Mateo / Jorge"
+    validations:
+      required: true
+  - type: textarea
+    id: urls
+    attributes:
+      label: URLs objetivo
+      description: "Qué secciones se van a extraer (idealmente oficial)."
+      placeholder: |
+        - https://...
+        - https://...
+    validations:
+      required: true
+  - type: textarea
+    id: risks
+    attributes:
+      label: Riesgos/mitigaciones
+      placeholder: |
+        - robots.txt / rate limit
+        - contenido dinámico
+        - bloqueos 403/429
+    validations:
+      required: false
+  - type: textarea
+    id: dod
+    attributes:
+      label: Definition of Done (DoD)
+      value: |
+        - [ ] Scraper reproducible en `src/semantic_layer_fvl/` (o scripts existentes extendidos)
+        - [ ] Cada documento guarda `source_url` y timestamp/fecha de extracción
+        - [ ] Salida cruda en `knowledge/` (o carpeta definida en docs)
+    validations:
+      required: true
+

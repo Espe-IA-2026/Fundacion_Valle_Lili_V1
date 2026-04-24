@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import csv
+import io
 import sys
 from pathlib import Path
 
@@ -137,6 +139,45 @@ with tab_qa:
         st.markdown(f"**Pregunta:** {st.session_state['last_qa_question']}")
         st.markdown("**Respuesta:**")
         st.markdown(st.session_state["last_qa_answer"])
+
+    if "last_qa_answer" in st.session_state:
+        st.divider()
+        st.subheader("Registro de pruebas (para las 20 preguntas)")
+
+        if "qa_log" not in st.session_state:
+            st.session_state["qa_log"] = []
+
+        col_a, col_b, col_c = st.columns([2, 2, 3])
+        with col_a:
+            add_to_log = st.button("Agregar a resultados", use_container_width=True)
+        with col_b:
+            clear_log = st.button("Limpiar resultados", use_container_width=True)
+
+        if add_to_log:
+            st.session_state["qa_log"].append(
+                {
+                    "question": st.session_state["last_qa_question"],
+                    "answer": st.session_state["last_qa_answer"],
+                }
+            )
+
+        if clear_log:
+            st.session_state["qa_log"] = []
+
+        csv_buffer = io.StringIO()
+        writer = csv.DictWriter(csv_buffer, fieldnames=["question", "answer"])
+        writer.writeheader()
+        writer.writerows(st.session_state["qa_log"])
+
+        with col_c:
+            st.download_button(
+                label=f"Descargar CSV ({len(st.session_state['qa_log'])})",
+                data=csv_buffer.getvalue(),
+                file_name="qa_results.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
+        st.caption("Sugerencia: guardar el archivo final como `tests/qa_results.csv` para el informe.")
 
     elif ask and not question.strip():
         st.warning("Por favor escribe una pregunta antes de consultar.")
