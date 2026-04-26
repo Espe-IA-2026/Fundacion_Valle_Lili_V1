@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import io
+import os
 import sys
 from pathlib import Path
 
@@ -29,12 +30,12 @@ st.set_page_config(
 # Cached resources
 # ---------------------------------------------------------------------------
 
-KNOWLEDGE_DIR = _ROOT / "knowledge"
+KNOWLEDGE_DIR = _ROOT / "data" / "knowledge_base.json"
 
 
 @st.cache_resource(show_spinner="Cargando base de conocimiento…")
 def get_knowledge() -> tuple[str, dict]:
-    return load_knowledge_base(KNOWLEDGE_DIR)
+    return load_knowledge_base(KNOWLEDGE_BASE_JSON)
 
 
 @st.cache_resource(show_spinner="Inicializando modelo…")
@@ -42,7 +43,9 @@ def get_chains() -> dict:
     return build_chains()
 
 
-_MAX_CONTEXT_CHARS = 38_000  # ~11k tokens — deja ~5k tokens para respuesta dentro de 16k ctx
+_MAX_CONTEXT_CHARS = (
+    400_000  # gpt-5.4-mini: 128k tokens. 400k chars ≈ 100k tokens, deja margen.
+)
 
 context_full, stats = get_knowledge()
 context = context_full[:_MAX_CONTEXT_CHARS]
@@ -81,7 +84,9 @@ with st.sidebar:
                 st.caption(f"• {doc}")
     st.divider()
     st.caption("Módulo 1 — Capa Semántica FVL")
-    st.caption("Modelo: llama3.2:1b (Ollama) · Contexto 38k chars")
+    st.caption(
+        f"Modelo: {os.getenv('OPENAI_MODEL', 'gpt-5.4-mini')} (OpenAI) · Contexto {_MAX_CONTEXT_CHARS:,} chars"
+    )
 
 # ---------------------------------------------------------------------------
 # Main area
@@ -94,7 +99,9 @@ st.caption(
 )
 st.divider()
 
-tab_qa, tab_summary, tab_faq = st.tabs(["💬 Preguntas y Respuestas", "📋 Resumen Ejecutivo", "❓ FAQ"])
+tab_qa, tab_summary, tab_faq = st.tabs(
+    ["💬 Preguntas y Respuestas", "📋 Resumen Ejecutivo", "❓ FAQ"]
+)
 
 # ---------------------------------------------------------------------------
 # Tab 1: Q&A
@@ -124,10 +131,14 @@ with tab_qa:
         placeholder = st.empty()
         full_answer = ""
         try:
-            for chunk in chains["qa"].stream({"context": context, "question": question}):
+            for chunk in chains["qa"].stream(
+                {"context": context, "question": question}
+            ):
                 full_answer += chunk
                 placeholder.markdown(full_answer + "▌")
-            placeholder.markdown(full_answer or "_Sin respuesta — el modelo no generó texto._")
+            placeholder.markdown(
+                full_answer or "_Sin respuesta — el modelo no generó texto._"
+            )
         except Exception as e:
             placeholder.error(f"Error del modelo: {e}")
         if full_answer:
@@ -177,7 +188,9 @@ with tab_qa:
                 mime="text/csv",
                 use_container_width=True,
             )
-        st.caption("Sugerencia: guardar el archivo final como `tests/qa_results.csv` para el informe.")
+        st.caption(
+            "Sugerencia: guardar el archivo final como `tests/qa_results.csv` para el informe."
+        )
 
     elif ask and not question.strip():
         st.warning("Por favor escribe una pregunta antes de consultar.")
@@ -217,7 +230,9 @@ with tab_summary:
             for chunk in chains["summary"].stream({"context": context}):
                 full_summary += chunk
                 placeholder.markdown(full_summary + "▌")
-            placeholder.markdown(full_summary or "_Sin respuesta — el modelo no generó texto._")
+            placeholder.markdown(
+                full_summary or "_Sin respuesta — el modelo no generó texto._"
+            )
         except Exception as e:
             placeholder.error(f"Error del modelo: {e}")
         if full_summary:
@@ -252,7 +267,9 @@ with tab_faq:
             for chunk in chains["faq"].stream({"context": context}):
                 full_faq += chunk
                 placeholder.markdown(full_faq + "▌")
-            placeholder.markdown(full_faq or "_Sin respuesta — el modelo no generó texto._")
+            placeholder.markdown(
+                full_faq or "_Sin respuesta — el modelo no generó texto._"
+            )
         except Exception as e:
             placeholder.error(f"Error del modelo: {e}")
         if full_faq:
