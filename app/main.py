@@ -30,12 +30,12 @@ st.set_page_config(
 # Cached resources
 # ---------------------------------------------------------------------------
 
-KNOWLEDGE_DIR = _ROOT / "data" / "knowledge_base.json"
+KNOWLEDGE_DIR = _ROOT / "knowledge"
 
 
 @st.cache_resource(show_spinner="Cargando base de conocimiento…")
 def get_knowledge() -> tuple[str, dict]:
-    return load_knowledge_base(KNOWLEDGE_BASE_JSON)
+    return load_knowledge_base(KNOWLEDGE_DIR)
 
 
 @st.cache_resource(show_spinner="Inicializando modelo…")

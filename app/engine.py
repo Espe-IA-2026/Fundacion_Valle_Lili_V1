@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
+from pydantic import SecretStr
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
@@ -106,7 +107,7 @@ def build_chains() -> dict[str, object]:
         model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
         temperature=0,
         streaming=True,
-        api_key=api_key,
+        api_key=SecretStr(api_key),
     )
     parser = StrOutputParser()
 

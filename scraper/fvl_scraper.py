@@ -25,6 +25,7 @@ from urllib.parse import urljoin, urlparse
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+from pydantic import AnyHttpUrl, TypeAdapter
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
@@ -32,15 +33,19 @@ from webdriver_manager.chrome import ChromeDriverManager
 
 # ── Configuración de rutas ───────────────────────────────────────────────────
 _ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(_ROOT))
+sys.path.insert(0, str(_ROOT / "src"))
 load_dotenv(_ROOT / ".env")
 
 import os
 
 # Importaciones del proyecto (reutilización de Fase 0)
-from src.semantic_layer_fvl.extractors.site_map import build_seed_urls
-from src.semantic_layer_fvl.processors.chunker import TextChunker
-from src.semantic_layer_fvl.processors.cleaner import TextCleaner
+from semantic_layer_fvl.processors.chunker import TextChunker
+from semantic_layer_fvl.processors.cleaner import TextCleaner
+from semantic_layer_fvl.processors.structurer import SemanticStructurer
+from semantic_layer_fvl.writers.markdown_writer import MarkdownWriter
+from semantic_layer_fvl.schemas.documents import RawPage, ExtractionMetadata
+from semantic_layer_fvl.config.settings import get_settings
+
 
 # ── Configuración ────────────────────────────────────────────────────────────
 BASE_URL: str = os.getenv("TARGET_BASE_URL", "https://valledellili.org")
@@ -176,8 +181,15 @@ def extract_content(html: str) -> tuple[str, str]:
     # Título: prefiere og:title, luego <title>
     title = ""
     og = soup.find("meta", property="og:title")
-    if og and og.get("content"):
-        title = og["content"].strip()
+    og_content_raw = og.get("content") if og else ""
+    if isinstance(og_content_raw, str):
+        og_content = og_content_raw.strip()
+    elif isinstance(og_content_raw, list):
+        og_content = " ".join(str(v) for v in og_content_raw).strip()
+    else:
+        og_content = ""
+    if og_content:
+        title = og_content
     elif soup.title and soup.title.string:
         title = soup.title.string.strip()
     # Limpia el sufijo del sitio (ej. "Servicios – Fundación Valle del Lili")
@@ -211,7 +223,7 @@ def extract_content(html: str) -> tuple[str, str]:
         or soup.find("article")
         or soup.find(id="content")
         or soup.find(id="main-content")
-        or soup.find(class_=lambda c: c and "content" in c.lower() if c else False)
+        or soup.find(class_=lambda c: bool(c and "content" in c.lower()))
         or soup.find("body")
     )
 
@@ -237,7 +249,16 @@ def discover_links(html: str, current_url: str) -> list[str]:
     soup = BeautifulSoup(html, "html.parser")
     links: list[str] = []
     for a in soup.find_all("a", href=True):
-        href = a["href"].strip()
+        href_raw = a.get("href", "")
+        if isinstance(href_raw, str):
+            href = href_raw.strip()
+        elif isinstance(href_raw, list):
+            href = " ".join(str(v) for v in href_raw).strip()
+        else:
+            href = str(href_raw).strip()
+
+        if not href:
+            continue
         if any(href.startswith(p) for p in ("#", "mailto:", "tel:", "javascript:")):
             continue
         full = urljoin(current_url, href).split("#")[0].split("?")[0]
@@ -247,23 +268,32 @@ def discover_links(html: str, current_url: str) -> list[str]:
 
 
 # ── Pipeline principal ────────────────────────────────────────────────────────
-def run_scraper(driver: webdriver.Chrome, max_pages: int) -> list[dict]:
-    """Ejecuta el scraping BFS y devuelve la lista de chunks para el JSON."""
+def run_scraper(driver: webdriver.Chrome, max_pages: int) -> int:
+    """Ejecuta el scraping y escribe archivos .md enriquecidos. Devuelve el nº de docs escritos."""
+    settings = get_settings()
     cleaner = TextCleaner()
-    # Chunks más grandes que los defaults (500 chars) para maximizar contexto semántico
-    chunker = TextChunker(max_chunk_size=800, chunk_overlap=80, min_chunk_size=150)
+    structurer = SemanticStructurer()
+    writer = MarkdownWriter(settings)
+    # Ya no necesitamos TextChunker aquí — SemanticStructurer estructura el contenido
 
-    seed_records = build_seed_urls(BASE_URL)
-    seed_urls = [str(r.url) for r in seed_records]
+    seed_urls = [
+        f"{BASE_URL}/",
+        f"{BASE_URL}/nuestra-institucion",
+        f"{BASE_URL}/servicios",
+        f"{BASE_URL}/especialidades",
+        f"{BASE_URL}/directorio-medico",
+        f"{BASE_URL}/nuestra-institucion/nuestras-sedes",
+        f"{BASE_URL}/contactanos",
+        f"{BASE_URL}/nuestra-institucion/marco-legal",
+        f"{BASE_URL}/investigacion",
+        f"{BASE_URL}/educacion",
+        f"{BASE_URL}/noticias-y-eventos",
+    ]
 
     queue: deque[str] = deque(seed_urls)
     visited: set[str] = set(seed_urls)
-    results: list[dict] = []
+    docs_written = 0
     page_count = 0
-
-    logging.info(
-        "Iniciando scraping — %d URLs semilla | max_pages=%d", len(seed_urls), max_pages
-    )
 
     while queue and page_count < max_pages:
         url = queue.popleft()
@@ -272,7 +302,7 @@ def run_scraper(driver: webdriver.Chrome, max_pages: int) -> list[dict]:
 
         html: str | None = None
 
-        # 1. Intentar con Selenium (maneja JS/contenido dinámico)
+        # 1. Selenium (JS rendering)
         for attempt in range(MAX_RETRIES + 1):
             try:
                 driver.get(url)
@@ -284,65 +314,58 @@ def run_scraper(driver: webdriver.Chrome, max_pages: int) -> list[dict]:
                 if attempt < MAX_RETRIES:
                     time.sleep(2**attempt)
 
-        # 2. Fallback: requests (contenido estático)
+        # 2. Fallback requests
         if not html:
-            logging.info("  → Fallback a requests para %s", url)
             try:
                 resp = requests.get(
                     url,
                     timeout=REQUEST_TIMEOUT,
                     headers={
                         "User-Agent": "Mozilla/5.0 (compatible; FVL-Scraper/1.0)",
-                        "Accept-Language": "es-CO,es;q=0.9,en;q=0.8",
+                        "Accept-Language": "es-CO,es;q=0.9",
                     },
                 )
                 resp.raise_for_status()
                 html = resp.text
             except Exception as exc:
-                logging.warning("  requests también falló: %s — omitiendo URL", exc)
+                logging.warning("  requests falló: %s — omitiendo", exc)
                 time.sleep(RATE_LIMIT_SECONDS)
                 continue
 
-        # 3. Extraer y limpiar contenido
-        title, raw_text = extract_content(html)
+        # 3. Extraer contenido
+        page_title, raw_text = extract_content(html)
         cleaned = cleaner.clean(raw_text)
 
         if not cleaned:
-            logging.debug("  Sin contenido útil — omitiendo")
             time.sleep(RATE_LIMIT_SECONDS)
             continue
 
-        # 4. Chunking semántico
-        chunks = chunker.chunk(cleaned)
-        category = infer_category(url, title)
-        scraped_at = datetime.now(timezone.utc).isoformat()
-
-        for i, chunk_text in enumerate(chunks):
-            results.append(
-                {
-                    "text": chunk_text,
-                    "metadata": {
-                        # Campos requeridos por Fase 2 (knowledge_loader.py)
-                        "source": title or url,
-                        "category": category,
-                        # Campos extra para Módulo 2 (RAG)
-                        "title": title or url,
-                        "url": url,
-                        "chunk_index": i,
-                        "total_chunks": len(chunks),
-                        "scraped_at": scraped_at,
-                    },
-                }
-            )
-
-        logging.info(
-            "  ✓ '%s' → %d chunks | categoría: %s",
-            title[:60] if title else url,
-            len(chunks),
-            category,
+        # 4. Construir RawPage → ProcessedDocument → escribir .md
+        validated_source_url = TypeAdapter(AnyHttpUrl).validate_python(url)
+        raw_page = RawPage(
+            url=validated_source_url,
+            title=page_title or url,
+            html=html,
+            text_content=cleaned,
+            metadata=ExtractionMetadata(
+                source_url=validated_source_url,
+                source_name="Fundacion Valle del Lili",
+                extractor_name="fvl_selenium_scraper",
+            ),
         )
 
-        # 5. Descubrir nuevos links (BFS)
+        processed = structurer.build_document(raw_page, cleaned)
+        output_path = writer.write(processed)
+        docs_written += 1
+
+        logging.info(
+            "  ✓ '%s' → %s [%s]",
+            processed.document.title[:60],
+            output_path.name,
+            processed.document.category.value,
+        )
+
+        # 5. Descubrir links (BFS)
         for link in discover_links(html, url):
             if link not in visited:
                 visited.add(link)
@@ -350,12 +373,7 @@ def run_scraper(driver: webdriver.Chrome, max_pages: int) -> list[dict]:
 
         time.sleep(RATE_LIMIT_SECONDS)
 
-    logging.info(
-        "BFS completado — páginas procesadas: %d | chunks totales: %d",
-        page_count,
-        len(results),
-    )
-    return results
+    return docs_written
 
 
 # ── Punto de entrada ──────────────────────────────────────────────────────────
@@ -391,27 +409,27 @@ def main() -> None:
 
     driver = build_driver(headless=headless)
     try:
+        docs_written = run_scraper(driver, max_pages=args.max_pages)
+        logging.info("Scraping finalizado: %d documentos escritos", docs_written)
         results = run_scraper(driver, max_pages=args.max_pages)
     finally:
         driver.quit()
 
-    OUTPUT_PATH.write_text(
-        json.dumps(results, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    # ── Resumen final ────────────────────────────────────────────
+    knowledge_dir = _ROOT / "knowledge"
+    md_files = list(knowledge_dir.rglob("*.md")) if knowledge_dir.exists() else []
+    cats: dict[str, int] = {}
+    for f in md_files:
+        if f.name != ".gitkeep":
+            cats[f.parent.name] = cats.get(f.parent.name, 0) + 1
 
-    # Resumen final
     logging.info("=" * 60)
     logging.info("SCRAPING COMPLETADO")
-    logging.info("Archivo: %s", OUTPUT_PATH)
-    logging.info("Total chunks: %d", len(results))
-    cats: dict[str, int] = {}
-    for item in results:
-        c = item["metadata"]["category"]
-        cats[c] = cats.get(c, 0) + 1
+    logging.info("Documentos escritos: %d", docs_written)
+    logging.info("Archivos .md en knowledge/: %d", len(md_files))
     logging.info("Distribución por categoría:")
     for cat, count in sorted(cats.items()):
-        logging.info("  %-30s %d chunks", cat, count)
+        logging.info("  %-35s %d docs", cat, count)
 
 
 if __name__ == "__main__":
