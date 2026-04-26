@@ -4,7 +4,7 @@ limpiar:
 	cls
 
 front:
-	limpiar
+	make limpiar
 	uv run streamlit run app/main.py
 
 scrap:
