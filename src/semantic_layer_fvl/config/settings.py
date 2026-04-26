@@ -29,10 +29,6 @@ class Settings(BaseSettings):
     news_feed_limit: int = Field(default=50, ge=1)
     news_search_days: int = Field(default=365, ge=1)
 
-    chroma_persist_dir: Path = Path("./vectorstore")
-    embedding_model: str = "paraphrase-multilingual-MiniLM-L12-v2"
-    search_results_limit: int = Field(default=5, ge=1)
-
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -59,13 +55,6 @@ class Settings(BaseSettings):
         if self.runs_dir.is_absolute():
             return self.runs_dir
         return (self.project_root / self.runs_dir).resolve()
-
-    @property
-    def resolved_chroma_dir(self) -> Path:
-        if self.chroma_persist_dir.is_absolute():
-            return self.chroma_persist_dir
-        return (self.project_root / self.chroma_persist_dir).resolve()
-
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

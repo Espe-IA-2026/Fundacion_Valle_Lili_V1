@@ -75,12 +75,3 @@ class ProcessedDocument(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
-class SearchResult(BaseModel):
-    document_id: str
-    title: str
-    category: str
-    source_url: str
-    content_snippet: str
-    distance: float
-    chunk_index: int | None = None
-    parent_document_id: str | None = None

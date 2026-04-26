@@ -1,11 +1,8 @@
 from __future__ import annotations
 
 import logging
-import re
 from datetime import UTC, datetime
 from pathlib import Path
-
-import yaml
 
 from semantic_layer_fvl.config import Settings, get_settings
 from semantic_layer_fvl.extractors.news import NewsFeedExtractor
@@ -15,15 +12,12 @@ from semantic_layer_fvl.extractors.youtube import YouTubeFeedExtractor
 from semantic_layer_fvl.processors import SemanticStructurer, TextCleaner
 from semantic_layer_fvl.schemas import (
     DocumentCategory,
-    ExtractionMetadata,
     PipelineItemResult,
     PipelineRunSummary,
     ProcessedDocument,
     RawPage,
-    SearchResult,
-    SourceDocument,
 )
-from semantic_layer_fvl.writers import MarkdownWriter, VectorStoreWriter
+from semantic_layer_fvl.writers import MarkdownWriter
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +35,6 @@ class SemanticPipeline:
         cleaner: TextCleaner | None = None,
         structurer: SemanticStructurer | None = None,
         writer: MarkdownWriter | None = None,
-        vectorstore_writer: VectorStoreWriter | None = None,
     ) -> None:
         self.settings = settings or get_settings()
         self.crawler = crawler or WebCrawler(settings=self.settings)
@@ -50,7 +43,6 @@ class SemanticPipeline:
         self.cleaner = cleaner or TextCleaner()
         self.structurer = structurer or SemanticStructurer()
         self.writer = writer or MarkdownWriter(self.settings)
-        self.vectorstore_writer = vectorstore_writer
 
     def process_raw_page(
         self,
@@ -64,10 +56,6 @@ class SemanticPipeline:
             processed.warnings.append("empty_cleaned_text")
         return processed
 
-    def _index_if_enabled(self, processed: ProcessedDocument) -> None:
-        if self.vectorstore_writer is not None:
-            self.vectorstore_writer.write(processed)
-
     def process_raw_pages(
         self,
         raw_pages: list[RawPage],
@@ -79,7 +67,6 @@ class SemanticPipeline:
         for raw_page in raw_pages:
             processed = self.process_raw_page(raw_page, category=category)
             output_path = self.writer.write(processed) if write else None
-            self._index_if_enabled(processed)
             results.append((processed, output_path))
         return results
 
@@ -94,7 +81,6 @@ class SemanticPipeline:
         processed = self.process_raw_page(raw_page, category=category)
 
         output_path = self.writer.write(processed) if write else None
-        self._index_if_enabled(processed)
         return processed, output_path
 
     def process_youtube_feed(
@@ -332,78 +318,3 @@ class SemanticPipeline:
         summary.finished_at = datetime.now(UTC)
         return summary
 
-    # ── Vectorstore helpers ──────────────────────────────────────
-
-    def index_knowledge_dir(self) -> int:
-        """Read all Markdown files from knowledge/ and index them in the vector store."""
-        if self.vectorstore_writer is None:
-            self.vectorstore_writer = VectorStoreWriter(settings=self.settings)
-
-        knowledge_dir = self.settings.resolved_output_dir
-        if not knowledge_dir.exists():
-            logger.warning("Knowledge directory not found: %s", knowledge_dir)
-            return 0
-
-        count = 0
-        for md_file in sorted(knowledge_dir.rglob("*.md")):
-            try:
-                processed = self._parse_markdown_file(md_file)
-                if processed is not None:
-                    self.vectorstore_writer.write(processed)
-                    count += 1
-            except Exception:
-                logger.exception("Failed to index %s", md_file)
-
-        logger.info("Indexed %d documents from %s", count, knowledge_dir)
-        return count
-
-    def search(self, query: str, n_results: int | None = None) -> list[SearchResult]:
-        """Perform semantic search over the indexed knowledge."""
-        if self.vectorstore_writer is None:
-            self.vectorstore_writer = VectorStoreWriter(settings=self.settings)
-        return self.vectorstore_writer.store.search(query, n_results=n_results)
-
-    @staticmethod
-    def _parse_markdown_file(path: Path) -> ProcessedDocument | None:
-        """Parse a Markdown file with YAML front-matter into a ProcessedDocument."""
-        text = path.read_text(encoding="utf-8")
-
-        fm_match = re.match(r"^---\n(.+?)\n---\n\n?(.*)", text, re.DOTALL)
-        if not fm_match:
-            return None
-
-        try:
-            front = yaml.safe_load(fm_match.group(1))
-        except Exception:
-            return None
-
-        if not isinstance(front, dict):
-            return None
-
-        body = fm_match.group(2).strip()
-        doc_id = front.get("document_id", path.stem)
-        title = front.get("title", path.stem)
-        category_str = front.get("category", "01_organizacion")
-
-        try:
-            category = DocumentCategory(category_str)
-        except ValueError:
-            category = DocumentCategory.ORGANIZACION
-
-        meta = ExtractionMetadata(
-            source_url=front.get("source_url", "https://valledellili.org"),
-            source_name=front.get("source_name", "Fundacion Valle del Lili"),
-            extractor_name=front.get("extractor_name", "knowledge_indexer"),
-        )
-
-        source_doc = SourceDocument(
-            document_id=doc_id,
-            title=title,
-            slug=front.get("slug", path.stem),
-            category=category,
-            source_url=front.get("source_url", "https://valledellili.org"),
-            source_name=front.get("source_name", "Fundacion Valle del Lili"),
-            summary=front.get("summary"),
-            extraction_metadata=meta,
-        )
-        return ProcessedDocument(document=source_doc, content_markdown=body)
