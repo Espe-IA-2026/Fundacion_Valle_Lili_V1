@@ -124,36 +124,6 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Guarda el resumen de corrida en el directorio de runs.",
     )
-    subparsers.add_parser(
-        "index-knowledge",
-        help="Indexa los archivos Markdown existentes en knowledge/ al vector store.",
-    )
-    search_parser = subparsers.add_parser(
-        "search",
-        help="Busqueda semantica sobre el knowledge indexado.",
-    )
-    search_parser.add_argument("query", help="Texto de busqueda.")
-    search_parser.add_argument(
-        "--limit",
-        type=int,
-        default=None,
-        help="Cantidad maxima de resultados.",
-    )
-    serve_parser = subparsers.add_parser(
-        "serve",
-        help="Inicia el servidor API REST.",
-    )
-    serve_parser.add_argument(
-        "--host",
-        default="0.0.0.0",
-        help="Host del servidor (default: 0.0.0.0).",
-    )
-    serve_parser.add_argument(
-        "--port",
-        type=int,
-        default=8000,
-        help="Puerto del servidor (default: 8000).",
-    )
     return parser
 
 
@@ -267,36 +237,6 @@ def handle_run_all(
     return 0 if summary.failure_count == 0 else 1
 
 
-def handle_index_knowledge() -> int:
-    pipeline = SemanticPipeline()
-    count = pipeline.index_knowledge_dir()
-    print(f"indexed={count}")
-    return 0
-
-
-def handle_search(query: str, *, limit: int | None) -> int:
-    pipeline = SemanticPipeline()
-    results = pipeline.search(query, n_results=limit)
-    print(f"results={len(results)}")
-    for result in results:
-        print(f'  [{result.distance:.4f}] "{result.title}" ({result.category})')
-        snippet = result.content_snippet.replace("\n", " ")[:120]
-        print(f"    {snippet}")
-    return 0
-
-
-def handle_serve(*, host: str, port: int) -> int:
-    import uvicorn
-
-    from semantic_layer_fvl.api import create_app
-
-    app = create_app()
-    print(f"Starting API server on http://{host}:{port}")
-    print(f"  Docs: http://{host}:{port}/docs")
-    uvicorn.run(app, host=host, port=port)
-    return 0
-
-
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
@@ -332,13 +272,6 @@ def main() -> int:
             write=args.write,
             save_summary=args.save_summary,
         )
-    if args.command == "index-knowledge":
-        return handle_index_knowledge()
-    if args.command == "search":
-        return handle_search(args.query, limit=args.limit)
-    if args.command == "serve":
-        return handle_serve(host=args.host, port=args.port)
-
     parser.print_help()
     return 1
 

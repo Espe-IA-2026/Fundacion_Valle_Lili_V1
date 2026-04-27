@@ -4,7 +4,6 @@ from semantic_layer_fvl.schemas.documents import (
     ProcessedDocument,
     PublicationStatus,
     RawPage,
-    SearchResult,
     SourceDocument,
     UrlRecord,
 )
@@ -18,7 +17,6 @@ __all__ = [
     "ProcessedDocument",
     "PublicationStatus",
     "RawPage",
-    "SearchResult",
     "SourceDocument",
     "UrlRecord",
 ]
