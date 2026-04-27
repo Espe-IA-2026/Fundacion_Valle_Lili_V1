@@ -618,5 +618,14 @@ El crawler trata los `4xx` (distinto de `429`) como "no disponible" y continúa.
 | Dependencias rotas | Baja | Alto | Lockfile `uv.lock`, versiones pinneadas |
 
 ---
+
+## Gestión del proyecto (Issues/Milestones)
+
+Para repartir el trabajo del equipo y llevar el avance por milestones:
+- Backlog sugerido: `docs/milestones_backlog.md`
+- Flujo de ramas (ramas personales → `Development` → `main`): `docs/workflow_git.md`
+- Documentación base: `docs/fuentes.md`, `docs/alcance.md`, `docs/informe.md`
+- Pruebas de Q&A (20 preguntas): `tests/qa_questions.md`, `tests/qa_results.csv`
+
 Realizado por: Jhonatan, Nicolas, Mateo y Jorge
 *Versión: 1.0 — Abril 2026*

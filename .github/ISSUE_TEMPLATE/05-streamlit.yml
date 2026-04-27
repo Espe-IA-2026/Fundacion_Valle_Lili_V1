@@ -1,0 +1,34 @@
+name: "UI Streamlit (demo)"
+description: "Interfaz de prueba para preguntas/respuestas + visualización."
+title: "M1-5: "
+labels: ["type:app"]
+body:
+  - type: input
+    id: owner
+    attributes:
+      label: Responsable (branch)
+      placeholder: "Nicolas / Jhonatan / Mateo / Jorge"
+    validations:
+      required: true
+  - type: textarea
+    id: features
+    attributes:
+      label: Features
+      placeholder: |
+        - input de pregunta
+        - output de respuesta
+        - fuentes / stats
+        - export de resultados
+    validations:
+      required: true
+  - type: textarea
+    id: dod
+    attributes:
+      label: Definition of Done (DoD)
+      value: |
+        - [ ] Corre: `uv run streamlit run app/main.py`
+        - [ ] Incluye sección de estadísticas del KB
+        - [ ] Permite registrar preguntas/respuestas para pruebas
+    validations:
+      required: true
+
