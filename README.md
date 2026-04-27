@@ -49,11 +49,14 @@ Sitio web / YouTube / RSS
 
 **Entregables concretos:**
 
-- Base de conocimiento en Markdown estructurado (~50-100 documentos organizados por categoría)
+- Base de conocimiento en Markdown estructurado (97 documentos organizados en 9 categorías)
 - Pipeline de extracción automatizado y reproducible
 - Búsqueda semántica con embeddings multilingüe (ChromaDB + `paraphrase-multilingual-MiniLM-L12-v2`)
+- Sistema Q&A con Gemma 4 (Ollama) + LangChain — tres funcionalidades: Q&A, Resumen Ejecutivo, FAQ
+- Dashboard interactivo con Streamlit
 - API REST con FastAPI para consultar el knowledge base desde otros sistemas
 - Suite de pruebas offline completa
+- Documentación extensiva de experimentación con prompts y batería de 20 preguntas
 
 ---
 
@@ -421,6 +424,33 @@ La suite cubre:
 
 - Agregar pruebas de integración con ejemplos reales de HTML y feeds guardados como fixtures
 - Validar el formato del frontmatter generado contra un parser YAML
+
+---
+
+## Documentación del Módulo 1
+
+| Documento | Descripción |
+|-----------|-------------|
+| [`docs/prompt_experiments.md`](docs/prompt_experiments.md) | Documentación completa de la experimentación iterativa con prompts (3 versiones × 3 prompts) |
+| [`docs/qa_test_results.md`](docs/qa_test_results.md) | Batería de 20 preguntas con resultados, análisis de calidad y comparación de modelos |
+| [`docs/informe_ieee.md`](docs/informe_ieee.md) | Informe técnico en formato IEEE con todas las secciones requeridas |
+
+### Dashboard Streamlit (Módulo 1 — App Q&A)
+
+```bash
+# Instalar dependencias del app
+uv sync --group app
+
+# Ejecutar el dashboard
+uv run streamlit run app/main.py
+```
+
+**Modelo:** Gemma 4 (Google, 2026) vía Ollama — 32k tokens de contexto, temperature 0.3  
+**Framework:** LangChain v0.3 con LCEL Chains  
+**Funcionalidades:**
+- 💬 Preguntas y Respuestas con streaming y historial de sesión
+- 📋 Resumen Ejecutivo de la institución (7 secciones temáticas)
+- ❓ Generación de 20 FAQ con distribución temática obligatoria
 
 ---
 

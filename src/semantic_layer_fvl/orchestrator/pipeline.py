@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import yaml
+import httpx
 
 from semantic_layer_fvl.config import Settings, get_settings
 from semantic_layer_fvl.extractors.news import NewsFeedExtractor
@@ -164,6 +165,15 @@ class SemanticPipeline:
                             queue.append(link)
             except CrawlBlockedError:
                 logger.info("Skipped (robots.txt): %s", url)
+            except httpx.HTTPStatusError as exc:
+                logger.warning("HTTP %d: %s (skipped)", exc.response.status_code, url)
+                summary.results.append(
+                    self._build_failure_result(
+                        source_type="web_discovered",
+                        input_reference=url,
+                        error=exc,
+                    )
+                )
             except Exception as exc:
                 logger.exception("Failed discovering %s", url)
                 summary.results.append(
