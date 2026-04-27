@@ -411,7 +411,6 @@ def main() -> None:
     try:
         docs_written = run_scraper(driver, max_pages=args.max_pages)
         logging.info("Scraping finalizado: %d documentos escritos", docs_written)
-        results = run_scraper(driver, max_pages=args.max_pages)
     finally:
         driver.quit()
 

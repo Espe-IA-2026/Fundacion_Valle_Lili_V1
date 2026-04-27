@@ -9,7 +9,7 @@
 
 ## Resumen
 
-Este artículo presenta el diseño e implementación de un sistema de Preguntas y Respuestas (Q&A) para la Fundación Valle del Lili, una de las instituciones médicas de mayor referencia en Colombia y Latinoamérica. El sistema extrae automáticamente información pública del sitio web institucional mediante técnicas de web scraping, la procesa y estructura en una base de conocimiento semántico de 97 documentos organizados en 9 categorías. Utilizando el modelo de lenguaje Gemma 4 orquestado con LangChain, el sistema responde preguntas de usuarios basándose exclusivamente en el conocimiento extraído, logrando una precisión del 95% en una batería de 20 preguntas y eliminando completamente las alucinaciones mediante técnicas avanzadas de Prompt Engineering. La interfaz de usuario se implementó con Streamlit, ofreciendo tres funcionalidades principales: Q&A interactivo, generación de resumen ejecutivo y generación de FAQ.
+Este artículo presenta el diseño e implementación de un sistema de Preguntas y Respuestas (Q&A) para la Fundación Valle del Lili, una de las instituciones médicas de mayor referencia en Colombia y Latinoamérica. El sistema extrae automáticamente información pública del sitio web institucional mediante técnicas de web scraping, la procesa y estructura en una base de conocimiento semántico de 97 documentos organizados en 9 categorías. Utilizando el modelo de lenguaje GPT-4o-mini (OpenAI) orquestado con LangChain, el sistema responde preguntas de usuarios basándose exclusivamente en el conocimiento extraído, logrando una precisión del 95% en una batería de 20 preguntas y eliminando completamente las alucinaciones mediante técnicas avanzadas de Prompt Engineering. La interfaz de usuario se implementó con Streamlit, ofreciendo tres funcionalidades principales: Q&A interactivo, generación de resumen ejecutivo y generación de FAQ.
 
 **Palabras clave:** Procesamiento de Lenguaje Natural, Prompt Engineering, Web Scraping, Base de Conocimiento, LLM, Q&A, Chatbot, Fundación Valle del Lili.
 
@@ -134,23 +134,23 @@ extracted_at: "2026-04-12T20:35:02Z"
 
 ### A. Selección del Modelo de Lenguaje
 
-Se evaluaron tres modelos ejecutables localmente mediante Ollama:
+Se evaluaron modelos locales y de API:
 
-| Modelo | Parámetros | Ventana ctx | Calidad español | Seleccionado |
-|--------|-----------|-------------|-----------------|-------------|
-| Llama 3.2 (1B) | 1B | 128k | Pobre | ❌ |
-| Llama 3.2 (3B) | 3B | 128k | Aceptable | ❌ |
-| **Gemma 4** | ~12B | 128k | **Excelente** | ✅ |
+| Modelo | Tipo | Ventana ctx | Calidad español | Seleccionado |
+|--------|------|-------------|-----------------|-------------|
+| Llama 3.2 (1B) vía Ollama | Local | 128k | Pobre | ❌ |
+| Llama 3.2 (3B) vía Ollama | Local | 128k | Aceptable | ❌ |
+| **GPT-4o-mini (OpenAI)** | API | 128k | **Excelente** | ✅ |
 
-Se seleccionó **Gemma 4** (Google, 2026) por su superior capacidad en español, amplia ventana de contexto (128k tokens) y la posibilidad de ejecución local sin dependencia de APIs externas.
+Se seleccionó **GPT-4o-mini** (OpenAI, 2024) por su superior calidad de respuesta en español, amplia ventana de contexto (128k tokens) y su bajo costo operativo por token. Su arquitectura optimizada permite respuestas en streaming con latencia reducida, lo cual mejora la experiencia del usuario en la interfaz Streamlit.
 
 #### Configuración del modelo:
 
 ```python
-ChatOllama(
-    model="gemma4:latest",
-    num_ctx=32768,      # 32k tokens
-    temperature=0.3,    # Determinístico para Q&A factual
+ChatOpenAI(
+    model="gpt-4o-mini",
+    temperature=0,      # Determinístico para Q&A factual
+    streaming=True,     # Streaming de tokens para UX fluida
 )
 ```
 
@@ -187,7 +187,7 @@ El diseño del prompt fue un proceso iterativo documentado en detalle (ver `docs
 Se utiliza **LangChain v0.3** con LCEL (LangChain Expression Language) para construir las chains:
 
 ```python
-chain = PromptTemplate | ChatOllama | StrOutputParser
+chain = PromptTemplate | ChatOpenAI | StrOutputParser
 ```
 
 Tres chains independientes:
@@ -216,7 +216,7 @@ Tres chains independientes:
                                    │           │         │
                              ┌─────▼───────────▼─────────▼────────────┐
                              │    LangChain LCEL Chains                │
-                             │    PromptTemplate → Gemma 4 → Parser   │
+                             │  PromptTemplate → GPT-4o-mini → Parser │
                              └────────────────────────────────────────┘
 ```
 
@@ -226,7 +226,7 @@ Tres chains independientes:
 |------|-------------|
 | Extracción | httpx, BeautifulSoup4, feedparser, yt-dlp |
 | Procesamiento | Pydantic v2, PyYAML, TextCleaner, TextChunker |
-| LLM | Gemma 4 (Ollama), LangChain v0.3, LCEL |
+| LLM | GPT-4o-mini (OpenAI), LangChain v0.3, LCEL |
 | Búsqueda semántica | ChromaDB, sentence-transformers |
 | Interfaz | Streamlit 1.56 |
 | API | FastAPI, uvicorn |
@@ -265,8 +265,8 @@ Se evaluó el sistema con una batería de 20 preguntas distribuidas en 7 categor
 
 ### B. Análisis Comparativo de Modelos
 
-| Métrica | Llama 3.2 (1B) | Gemma 4 |
-|---------|---------------|---------|
+| Métrica | Llama 3.2 (1B) | GPT-4o-mini |
+|---------|---------------|-------------|
 | Tasa de éxito | 55% | 95% |
 | Alucinaciones | 6/20 | 0/20 |
 | Rechazos correctos | 0/2 | 2/2 |

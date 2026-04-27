@@ -58,7 +58,7 @@ chains = get_chains()
 with st.sidebar:
     st.image(
         "https://valledellili.org/wp-content/uploads/2021/05/logo-fvl.svg",
-        width="stretch",
+        width=220,
     )
     st.markdown("## 📚 Base de Conocimiento")
     st.metric("Documentos cargados", stats["total_documents"])

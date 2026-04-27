@@ -3,7 +3,7 @@
 **Proyecto:** Capa Semántica — Fundación Valle del Lili  
 **Módulo:** 1 — Sistema Q&A  
 **Equipo:** Jhonatan, Nicolas, Mateo, Jorge  
-**Modelo final:** Gemma 4 (Google, 2026) vía Ollama  
+**Modelo final:** GPT-4o-mini (OpenAI, 2024) vía API  
 **Framework:** LangChain v0.3 (LCEL Chains)
 
 ---
