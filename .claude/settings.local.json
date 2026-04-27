@@ -12,7 +12,17 @@
       "Bash(C:/Users/USER/AppData/Local/Python/pythoncore-3.14-64/python.exe -c ':*)",
       "Bash(ollama ps *)",
       "Bash(nvidia-smi)",
-      "Bash(ollama --version)"
+      "Bash(ollama --version)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git remote *)",
+      "Bash(git push *)",
+      "Bash(git pull *)",
+      "Bash(git fetch *)",
+      "Bash(git merge *)",
+      "Bash(git checkout *)",
+      "Bash(git rm *)",
+      "Bash(git show *)"
     ]
   }
 }

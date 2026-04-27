@@ -63,14 +63,30 @@ class _MetadataParser(HTMLParser):
                 self.title_parts.append(cleaned)
 
 
-class _TextParser(HTMLParser):
+class _MarkdownParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
         self.parts: list[str] = []
         self.primary_parts: list[str] = []
+        
         self._ignored_depth = 0
-        self._ignored_tags = {"head", "script", "style", "noscript", "svg", "title"}
+        self._ignored_tags = {
+            "head", "script", "style", "noscript", "svg", "title", 
+            "nav", "footer", "iframe", "aside", "header", "form", "dialog"
+        }
         self._primary_depth = 0
+        self._base_url = ""
+        self._link_urls: list[str | None] = []
+        
+        # State tracking for formatting
+        self._list_depth = 0
+        self._in_table = False
+        self._in_th = False
+        self._in_td = False
+        
+        self._table_headers: list[str] = []
+        self._table_rows: list[list[str]] = []
+        self._current_row: list[str] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         lowered = tag.lower()
@@ -82,23 +98,141 @@ class _TextParser(HTMLParser):
         if lowered in {"main", "article"} or attr_map.get("role", "").lower() == "main":
             self._primary_depth += 1
 
+        if self._ignored_depth > 0:
+            return
+
+        # Formatting
+        if lowered in {"h1", "h2", "h3", "h4", "h5", "h6"}:
+            level = int(lowered[1])
+            self._append_text(f"\n\n{'#' * level} ")
+        elif lowered in {"p", "div", "br"}:
+            self._append_text("\n\n")
+        elif lowered == "a":
+            href = attr_map.get("href", "").strip()
+            if href and not href.startswith(("#", "javascript:", "mailto:", "tel:")):
+                from urllib.parse import urljoin
+                abs_url = urljoin(self._base_url, href)
+                self._link_urls.append(abs_url)
+                self._append_text("[")
+            else:
+                self._link_urls.append(None)
+        elif lowered in {"ul", "ol"}:
+            self._list_depth += 1
+            self._append_text("\n")
+        elif lowered == "li":
+            indent = "  " * (self._list_depth - 1)
+            self._append_text(f"\n{indent}- ")
+        elif lowered == "table":
+            self._in_table = True
+            self._table_headers = []
+            self._table_rows = []
+        elif lowered == "tr":
+            self._current_row = []
+        elif lowered == "th":
+            self._in_th = True
+        elif lowered == "td":
+            self._in_td = True
+
     def handle_endtag(self, tag: str) -> None:
         lowered = tag.lower()
+        
         if lowered in self._ignored_tags and self._ignored_depth > 0:
             self._ignored_depth -= 1
             return
 
         if lowered in {"main", "article"} and self._primary_depth > 0:
             self._primary_depth -= 1
+            
+        if self._ignored_depth > 0:
+            return
+
+        # End Formatting
+        if lowered in {"ul", "ol"}:
+            self._list_depth -= 1
+            self._append_text("\n\n")
+        elif lowered == "a":
+            if self._link_urls:
+                url = self._link_urls.pop()
+                if url:
+                    # To avoid trailing spaces inside brackets breaking markdown:
+                    # if self.parts and self.parts[-1].endswith(" "):
+                    #    self.parts[-1] = self.parts[-1].rstrip()
+                    # It's okay as is for now.
+                    self._append_text(f"]({url})")
+        elif lowered == "table":
+            self._in_table = False
+            self._render_table()
+        elif lowered == "tr":
+            if self._in_table and self._current_row:
+                self._table_rows.append(self._current_row)
+        elif lowered == "th":
+            self._in_th = False
+        elif lowered == "td":
+            self._in_td = False
 
     def handle_data(self, data: str) -> None:
         if self._ignored_depth > 0:
             return
+            
         cleaned = " ".join(data.split())
-        if cleaned:
-            self.parts.append(cleaned)
-            if self._primary_depth > 0:
-                self.primary_parts.append(cleaned)
+        if not cleaned:
+            return
+
+        if self._in_th:
+            self._table_headers.append(cleaned)
+        elif self._in_td:
+            self._current_row.append(cleaned)
+        else:
+            self._append_text(cleaned + " ")
+
+    def _append_text(self, text: str) -> None:
+        # Don't add text if we are inside a table (it will be rendered at the end)
+        if self._in_table:
+            return
+            
+        if text.strip() == "" and self.parts and self.parts[-1].endswith("\n"):
+            # Avoid excessive newlines
+            if text == "\n\n" and self.parts[-1].endswith("\n\n"):
+                return
+                
+        self.parts.append(text)
+        if self._primary_depth > 0:
+            self.primary_parts.append(text)
+
+    def _render_table(self) -> None:
+        if not self._table_headers and not self._table_rows:
+            return
+            
+        table_md = "\n\n"
+        
+        # If no explicit headers were found, use the first row as headers or dummy headers
+        headers = self._table_headers
+        rows = self._table_rows
+        
+        if not headers and rows:
+            headers = rows.pop(0)
+            
+        if headers:
+            table_md += "| " + " | ".join(headers) + " |\n"
+            table_md += "|" + "|".join(["---"] * len(headers)) + "|\n"
+            
+        for row in rows:
+            # Pad row if it has fewer columns than headers
+            padded_row = row + [""] * (len(headers) - len(row)) if headers else row
+            table_md += "| " + " | ".join(padded_row) + " |\n"
+            
+        table_md += "\n"
+        
+        self.parts.append(table_md)
+        if self._primary_depth > 0:
+            self.primary_parts.append(table_md)
+
+    def get_markdown(self, primary_only: bool) -> str:
+        parts = self.primary_parts if primary_only else self.parts
+        # Join parts and clean up excessive newlines
+        md = "".join(parts)
+        md = re.sub(r"\n{3,}", "\n\n", md)
+        return md.strip()
 
 
 def extract_title(html: str) -> str | None:
@@ -151,17 +285,17 @@ def decode_html(response) -> str:
     return response.text
 
 
-def extract_text_content(html: str) -> tuple[str, bool]:
+def extract_text_content(html: str, base_url: str = "") -> tuple[str, bool]:
     """Return (text_content, has_primary_content).
 
     has_primary_content is True when content was found inside a <main>,
     <article> or role="main" element; False when falling back to all page text.
     """
-    parser = _TextParser()
+    parser = _MarkdownParser()
+    parser._base_url = base_url
     parser.feed(html)
     has_primary = bool(parser.primary_parts)
-    preferred_parts = parser.primary_parts if has_primary else parser.parts
-    return "\n".join(preferred_parts), has_primary
+    return parser.get_markdown(has_primary), has_primary
 
 
 class _LinkParser(HTMLParser):
@@ -251,7 +385,7 @@ class WebCrawler:
         response.raise_for_status()
         html = decode_html(response)
         meta_description = extract_meta_description(html)
-        text_content, has_primary = extract_text_content(html)
+        text_content, has_primary = extract_text_content(html, str(response.url))
         if meta_description and not has_primary:
             text_content = f"{meta_description}\n\n{text_content}".strip()
 
