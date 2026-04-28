@@ -5,18 +5,9 @@ description = "Módulo 1 — Chatbot corporativo para la Fundación Valle del Li
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    # Scraping
-    "selenium>=4.20,<5.0",
     "beautifulsoup4>=4.12,<5.0",
+    "httpx>=0.27,<1.0",
     "requests>=2.31,<3.0",
-    "webdriver-manager>=4.0,<5.0",
-    # LangChain + OpenAI
-    "langchain>=0.3,<1.0",
-    "langchain-openai>=0.2,<1.0",
-    "openai>=1.50,<2.0",
-    # Interfaz
-    "streamlit>=1.40,<2.0",
-    # Utils
     "python-dotenv>=1.0,<2.0",
     "pydantic>=2.11,<3.0",
     "pydantic-settings>=2.10,<3.0",
@@ -37,7 +28,7 @@ build-backend = "hatchling.build"
 semantic-layer-fvl = "semantic_layer_fvl.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/semantic_layer_fvl", "scraper", "app"]
+packages = ["src/semantic_layer_fvl"]
 
 [tool.pytest.ini_options]
 addopts = "-p no:cacheprovider"
