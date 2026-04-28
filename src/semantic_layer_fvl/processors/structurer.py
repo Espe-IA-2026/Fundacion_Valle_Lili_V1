@@ -59,6 +59,10 @@ KEYWORD_CATEGORY_RULES: tuple[tuple[tuple[str, ...], DocumentCategory], ...] = (
 _RE_REAL_WORD = re.compile(r"[a-zA-ZáéíóúñüÁÉÍÓÚÑÜ]{4,}")
 _RE_NOISE_START = re.compile(r"^(?:https?://|!\[|/[\w./%-]{5,})")
 
+_RE_MD_LINK = re.compile(r'\[([^\]\n]+)\]\([^\)\n]+\)')
+_RE_REAL_WORD = re.compile(r'[a-zA-ZáéíóúñüÁÉÍÓÚÑÜ]{4,}')
+_RE_NOISE_START = re.compile(r'^(?:https?://|!\[|/[\w./%-]{5,})')
+
 
 def slugify(value: str) -> str:
     normalized = (
@@ -168,10 +172,8 @@ class SemanticStructurer:
         if not stripped:
             return None
         for paragraph in stripped.split("\n\n"):
-            candidate = paragraph.replace("\n", " ").strip()
-            if not candidate:
-                continue
-            if _RE_NOISE_START.match(candidate):
+            candidate = _RE_MD_LINK.sub(r'\1', paragraph.replace("\n", " ").strip())
+            if not candidate or _RE_NOISE_START.match(candidate):
                 continue
             if len(_RE_REAL_WORD.findall(candidate)) < 4:
                 continue

@@ -339,7 +339,19 @@ class WebCrawler:
         markdown_content = md(
             str(container), heading_style="ATX", strip=["script", "style"]
         )
-        markdown_content = re.sub(r"(?m)^(## )", r"---\n\n\1", markdown_content)
+        markdown_content = re.sub(r'(?m)^(## )', r'---\n\n\1', markdown_content)
+        markdown_content = re.sub(
+            r'(?:---\n\n)?## Otros especialistas.*',
+            '',
+            markdown_content,
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+        markdown_content = re.sub(
+            r'\[([^\]\n]+)\]\(https?://[^\)\n]+/buscador-integral/[^\)\n]*\)',
+            r'\1',
+            markdown_content,
+        )
+        markdown_content = markdown_content.strip()
 
         extra: dict[str, str] = {}
         for field_name, selector in config.extra_metadata_selectors.items():
