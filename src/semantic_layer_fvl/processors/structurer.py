@@ -57,6 +57,10 @@ KEYWORD_CATEGORY_RULES: tuple[tuple[tuple[str, ...], DocumentCategory], ...] = (
     (("video", "youtube", "multimedia"), DocumentCategory.MULTIMEDIA),
 )
 
+_RE_MD_LINK = re.compile(r'\[([^\]\n]+)\]\([^\)\n]+\)')
+_RE_REAL_WORD = re.compile(r'[a-zA-ZáéíóúñüÁÉÍÓÚÑÜ]{4,}')
+_RE_NOISE_START = re.compile(r'^(?:https?://|!\[|/[\w./%-]{5,})')
+
 
 def slugify(value: str) -> str:
     normalized = (
@@ -165,12 +169,17 @@ class SemanticStructurer:
         stripped = cleaned_text.strip()
         if not stripped:
             return None
-
-        summary = stripped.split("\n\n", 1)[0].replace("\n", " ")
-        if len(summary) <= max_length:
-            return summary
-        truncated = summary[:max_length].rsplit(" ", 1)[0].rstrip(".,;: ")
-        return f"{truncated}..."
+        for paragraph in stripped.split("\n\n"):
+            candidate = _RE_MD_LINK.sub(r'\1', paragraph.replace("\n", " ").strip())
+            if not candidate or _RE_NOISE_START.match(candidate):
+                continue
+            if len(_RE_REAL_WORD.findall(candidate)) < 4:
+                continue
+            if len(candidate) <= max_length:
+                return candidate
+            truncated = candidate[:max_length].rsplit(" ", 1)[0].rstrip(".,;: ")
+            return f"{truncated}..."
+        return None
 
     @staticmethod
     def _build_markdown_body(title: str, cleaned_text: str) -> str:

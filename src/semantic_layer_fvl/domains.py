@@ -38,11 +38,7 @@ DOMAIN_CONFIGS: dict[str, DomainConfig] = {
         category="03_talento_humano",
         url_include_patterns=["/especialistas/", "/medicos/", "/directorio-medico/"],
         url_exclude_patterns=[],
-        extra_metadata_selectors={
-            "especialidad": "section.personal-sfaff-lite",
-            "cargo": "[class*='cargo'], [class*='position']",
-            "educacion": "[class*='educacion'], [class*='formacion']",
-        },
+        extra_metadata_selectors={},
         fallback_urls=["https://valledellili.org/directorio-medico/"],
     ),
     "sedes": DomainConfig(
