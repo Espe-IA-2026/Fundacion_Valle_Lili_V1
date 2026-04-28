@@ -8,7 +8,7 @@ from urllib.parse import urljoin, urlsplit, urlunsplit
 
 from bs4 import BeautifulSoup
 from markdownify import markdownify as md
-from pydantic import AnyHttpUrl
+from pydantic import AnyHttpUrl, TypeAdapter
 
 from semantic_layer_fvl.config import Settings, get_settings
 from semantic_layer_fvl.extractors.http_client import HttpClient
@@ -26,6 +26,8 @@ _DOMAIN_NOISE_SELECTOR = (
 )
 
 logger = logging.getLogger(__name__)
+
+_HTTP_URL_ADAPTER = TypeAdapter(AnyHttpUrl)
 
 _NON_HTML_EXTENSIONS = frozenset(
     {
@@ -292,7 +294,7 @@ class WebCrawler:
     }
 
     def fetch_domain_page(
-        self, url: AnyHttpUrl, config: DomainConfig
+        self, url: str | AnyHttpUrl, config: DomainConfig
     ) -> RawPage | None:
         """Fetch a page using domain-specific CSS selector and convert to Markdown.
 
@@ -303,16 +305,21 @@ class WebCrawler:
         """
         import requests as req_lib
 
+        normalized_url = _HTTP_URL_ADAPTER.validate_python(str(url))
         self.client.rate_limiter.wait()
         try:
             response = req_lib.get(
-                str(url),
+                str(normalized_url),
                 headers=self._BROWSER_HEADERS,
                 timeout=self.settings.request_timeout,
             )
             response.raise_for_status()
         except Exception as exc:
-            logger.warning("[domain_crawler] Could not fetch %s: %s", url, exc)
+            logger.warning(
+                "[domain_crawler] Could not fetch %s: %s",
+                normalized_url,
+                exc,
+            )
             return None
 
         soup = BeautifulSoup(response.content, "html.parser")
@@ -325,7 +332,7 @@ class WebCrawler:
             logger.warning(
                 "[domain_crawler] Selector '%s' not found in %s — falling back to <body>",
                 config.container_selector,
-                url,
+                normalized_url,
             )
             container = soup.body or soup
 
@@ -355,17 +362,19 @@ class WebCrawler:
         h1 = soup.find("h1")
         title_tag = soup.find("title")
         raw_title = h1 or title_tag
-        title = raw_title.get_text(strip=True)[:200] if raw_title else str(url)
+        title = (
+            raw_title.get_text(strip=True)[:200] if raw_title else str(normalized_url)
+        )
 
         return RawPage(
-            url=url,
+            url=normalized_url,
             title=title,
             html=response.text,
             text_content=markdown_content,
             markdown=markdown_content,
             extra_metadata=extra,
             metadata=ExtractionMetadata(
-                source_url=cast(AnyHttpUrl, response.url),
+                source_url=_HTTP_URL_ADAPTER.validate_python(str(response.url)),
                 source_name=self.source_name,
                 extractor_name="domain_web_crawler",
                 http_status=response.status_code,
@@ -373,7 +382,7 @@ class WebCrawler:
             ),
         )
 
-    def fetch(self, url: AnyHttpUrl) -> RawPage:
+    def fetch(self, url: str | AnyHttpUrl) -> RawPage:
         if self.settings.respect_robots_txt:
             decision = self.robots_policy.evaluate(str(url))
             if not decision.allowed:
@@ -389,7 +398,7 @@ class WebCrawler:
         if meta_description and not has_primary:
             text_content = f"{meta_description}\n\n{text_content}".strip()
 
-        source_url = cast(AnyHttpUrl, response.url)
+        source_url = _HTTP_URL_ADAPTER.validate_python(str(response.url))
         metadata = ExtractionMetadata(
             source_url=source_url,
             source_name=self.source_name,

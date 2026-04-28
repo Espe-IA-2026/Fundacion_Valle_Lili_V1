@@ -3,7 +3,10 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
+from collections.abc import Sequence
 from typing import Literal
+
+from pydantic import AnyHttpUrl
 
 from semantic_layer_fvl.config import Settings, get_settings
 from semantic_layer_fvl.extractors.news import NewsFeedExtractor
@@ -89,14 +92,14 @@ class SemanticPipeline:
 
     def process_url(
         self,
-        url: str,
+        url: str | AnyHttpUrl,
         *,
         category: DocumentCategory | None = None,
         write: bool = False,
     ) -> tuple[ProcessedDocument, Path | None]:
         """Fetch a URL, process it and optionally write the result."""
 
-        raw_page = self.crawler.fetch(url)
+        raw_page = self.crawler.fetch(str(url))
         processed = self.process_raw_page(raw_page, category=category)
 
         output_path = self.writer.write(processed) if write else None
@@ -174,13 +177,13 @@ class SemanticPipeline:
                 summary.results.append(
                     self._build_success_result(
                         source_type="web_discovered",
-                        input_reference=url,
+                        input_reference=str(url),
                         processed=processed,
                         output_path=output_path,
                     )
                 )
                 if raw_page.html:
-                    for link in extract_links(raw_page.html, url):
+                    for link in extract_links(raw_page.html, str(url)):
                         if link not in seen:
                             seen.add(link)
                             queue.append(link)
@@ -191,7 +194,7 @@ class SemanticPipeline:
                 summary.results.append(
                     self._build_failure_result(
                         source_type="web_discovered",
-                        input_reference=url,
+                        input_reference=str(url),
                         error=exc,
                     )
                 )
@@ -200,7 +203,7 @@ class SemanticPipeline:
 
     def run_urls(
         self,
-        urls: list[str],
+        urls: Sequence[str | AnyHttpUrl],
         *,
         write: bool = False,
         category: DocumentCategory | None = None,
@@ -217,7 +220,7 @@ class SemanticPipeline:
                 summary.results.append(
                     self._build_success_result(
                         source_type="web",
-                        input_reference=url,
+                        input_reference=str(url),
                         processed=processed,
                         output_path=output_path,
                     )
@@ -227,7 +230,7 @@ class SemanticPipeline:
                 summary.results.append(
                     self._build_failure_result(
                         source_type="web",
-                        input_reference=url,
+                        input_reference=str(url),
                         error=exc,
                     )
                 )
@@ -251,7 +254,7 @@ class SemanticPipeline:
                     summary.results.append(
                         self._build_success_result(
                             source_type="youtube_feed",
-                            input_reference=feed_url,
+                            input_reference=str(feed_url),
                             processed=processed,
                             output_path=output_path,
                         )
@@ -261,7 +264,7 @@ class SemanticPipeline:
                 summary.results.append(
                     self._build_failure_result(
                         source_type="youtube_feed",
-                        input_reference=feed_url,
+                        input_reference=str(feed_url),
                         error=exc,
                     )
                 )
@@ -285,7 +288,7 @@ class SemanticPipeline:
                     summary.results.append(
                         self._build_success_result(
                             source_type="news_feed",
-                            input_reference=feed_url,
+                            input_reference=str(feed_url),
                             processed=processed,
                             output_path=output_path,
                         )
@@ -295,7 +298,7 @@ class SemanticPipeline:
                 summary.results.append(
                     self._build_failure_result(
                         source_type="news_feed",
-                        input_reference=feed_url,
+                        input_reference=str(feed_url),
                         error=exc,
                     )
                 )
@@ -362,7 +365,7 @@ class SemanticPipeline:
                     summary.results.append(
                         PipelineItemResult(
                             source_type="web_domain",
-                            input_reference=url,
+                            input_reference=str(url),
                             success=False,
                             error="fetch returned None (network or HTTP error)",
                         )
@@ -373,7 +376,7 @@ class SemanticPipeline:
                     summary.results.append(
                         PipelineItemResult(
                             source_type="web_domain",
-                            input_reference=url,
+                            input_reference=str(url),
                             success=False,
                             error="empty content after extraction",
                         )
@@ -396,7 +399,7 @@ class SemanticPipeline:
                 summary.results.append(
                     self._build_success_result(
                         source_type="web_domain",
-                        input_reference=url,
+                        input_reference=str(url),
                         processed=processed,
                         output_path=output_path,
                     )
@@ -406,7 +409,7 @@ class SemanticPipeline:
                 summary.results.append(
                     self._build_failure_result(
                         source_type="web_domain",
-                        input_reference=url,
+                        input_reference=str(url),
                         error=exc,
                     )
                 )
