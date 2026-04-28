@@ -66,7 +66,9 @@ def _parse_sitemap(url: str) -> list[str]:
 def _apply_filters(urls: list[str], config: DomainConfig) -> list[str]:
     result: list[str] = []
     for url in urls:
-        if config.url_include_patterns and not any(p in url for p in config.url_include_patterns):
+        if config.url_include_patterns and not any(
+            p in url for p in config.url_include_patterns
+        ):
             continue
         if any(p in url for p in config.url_exclude_patterns):
             continue

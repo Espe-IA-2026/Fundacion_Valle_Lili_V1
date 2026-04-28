@@ -18,7 +18,9 @@ class MarkdownWriter:
         domain_folder: str | None = None,
     ) -> Path:
         folder = domain_folder or document.document.category.value
-        return self.settings.resolved_output_dir / folder / f"{document.document.slug}.md"
+        return (
+            self.settings.resolved_output_dir / folder / f"{document.document.slug}.md"
+        )
 
     def write(
         self,
@@ -27,7 +29,9 @@ class MarkdownWriter:
     ) -> Path:
         output_path = self.resolve_output_path(document, domain_folder=domain_folder)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(self.render(document, domain_folder=domain_folder), encoding="utf-8")
+        output_path.write_text(
+            self.render(document, domain_folder=domain_folder), encoding="utf-8"
+        )
         return output_path
 
     def render(

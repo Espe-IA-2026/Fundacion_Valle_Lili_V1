@@ -53,7 +53,9 @@ class HttpClient:
         rate_limiter: RateLimiter | None = None,
     ) -> None:
         self.settings = settings or get_settings()
-        self.rate_limiter = rate_limiter or RateLimiter(self.settings.requests_per_second)
+        self.rate_limiter = rate_limiter or RateLimiter(
+            self.settings.requests_per_second
+        )
         self._client = httpx.Client(
             follow_redirects=True,
             headers=self._build_default_headers(),

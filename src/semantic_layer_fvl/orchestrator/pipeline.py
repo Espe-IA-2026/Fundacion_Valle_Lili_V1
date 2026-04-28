@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 class SemanticPipeline:
-    """Minimal end-to-end pipeline from fetch to Markdown output."""
+    """End-to-end pipeline from extraction to Markdown output."""
 
     def __init__(
         self,
@@ -41,6 +41,8 @@ class SemanticPipeline:
         structurer: SemanticStructurer | None = None,
         writer: MarkdownWriter | None = None,
     ) -> None:
+        """Initialize the pipeline dependencies and default services."""
+
         self.settings = settings or get_settings()
         self.crawler = crawler or WebCrawler(settings=self.settings)
         self.youtube_extractor = youtube_extractor or YouTubeFeedExtractor(
@@ -59,6 +61,8 @@ class SemanticPipeline:
         *,
         category: DocumentCategory | None = None,
     ) -> ProcessedDocument:
+        """Clean and structure a raw page into a processed document."""
+
         cleaned_text = self.cleaner.clean(raw_page.text_content)
         processed = self.structurer.build_document(
             raw_page, cleaned_text, category=category
@@ -74,6 +78,8 @@ class SemanticPipeline:
         category: DocumentCategory | None = None,
         write: bool = False,
     ) -> list[tuple[ProcessedDocument, Path | None]]:
+        """Process multiple raw pages and optionally write each result."""
+
         results: list[tuple[ProcessedDocument, Path | None]] = []
         for raw_page in raw_pages:
             processed = self.process_raw_page(raw_page, category=category)
@@ -88,6 +94,8 @@ class SemanticPipeline:
         category: DocumentCategory | None = None,
         write: bool = False,
     ) -> tuple[ProcessedDocument, Path | None]:
+        """Fetch a URL, process it and optionally write the result."""
+
         raw_page = self.crawler.fetch(url)
         processed = self.process_raw_page(raw_page, category=category)
 
@@ -100,9 +108,13 @@ class SemanticPipeline:
         *,
         write: bool = False,
     ) -> list[tuple[ProcessedDocument, Path | None]]:
+        """Fetch and process a public YouTube Atom feed."""
+
         raw_pages = self.youtube_extractor.fetch_feed(feed_url)
         return self.process_raw_pages(
-            raw_pages, category=DocumentCategory.MULTIMEDIA, write=write
+            raw_pages,
+            category=DocumentCategory.MULTIMEDIA,
+            write=write,
         )
 
     def process_news_feed(
@@ -111,9 +123,13 @@ class SemanticPipeline:
         *,
         write: bool = False,
     ) -> list[tuple[ProcessedDocument, Path | None]]:
+        """Fetch and process a public news RSS or Atom feed."""
+
         raw_pages = self.news_extractor.fetch_feed(feed_url)
         return self.process_raw_pages(
-            raw_pages, category=DocumentCategory.NOTICIAS, write=write
+            raw_pages,
+            category=DocumentCategory.NOTICIAS,
+            write=write,
         )
 
     def run_seed_urls(
@@ -122,6 +138,8 @@ class SemanticPipeline:
         limit: int | None = None,
         write: bool = False,
     ) -> PipelineRunSummary:
+        """Process the configured seed URLs, optionally limited by count."""
+
         base_url = str(self.settings.target_base_url)
         urls = [str(record.url) for record in build_seed_urls(base_url)]
         if limit is not None:
@@ -134,11 +152,12 @@ class SemanticPipeline:
         max_pages: int = 50,
         write: bool = False,
     ) -> PipelineRunSummary:
-        """BFS crawl starting from seed URLs, following discovered internal links.
+        """Run a breadth-first crawl from seeds and follow internal links.
 
-        Processes up to max_pages pages.  Blocked URLs (robots.txt) are silently
-        skipped; other errors are recorded as failures in the summary.
+        Processes up to ``max_pages`` pages. Blocked URLs are skipped and
+        other errors are recorded as failures in the summary.
         """
+
         summary = PipelineRunSummary(write_enabled=write)
         base_url = str(self.settings.target_base_url)
         seed_urls = [str(r.url) for r in build_seed_urls(base_url)]
@@ -186,6 +205,8 @@ class SemanticPipeline:
         write: bool = False,
         category: DocumentCategory | None = None,
     ) -> PipelineRunSummary:
+        """Process a list of web URLs and collect their outcomes."""
+
         summary = PipelineRunSummary(write_enabled=write)
         for url in urls:
             try:
@@ -218,6 +239,8 @@ class SemanticPipeline:
         *,
         write: bool = False,
     ) -> PipelineRunSummary:
+        """Process multiple YouTube feeds and collect their outcomes."""
+
         summary = PipelineRunSummary(write_enabled=write)
         for feed_url in feed_urls:
             try:
@@ -250,6 +273,8 @@ class SemanticPipeline:
         *,
         write: bool = False,
     ) -> PipelineRunSummary:
+        """Process multiple news feeds and collect their outcomes."""
+
         summary = PipelineRunSummary(write_enabled=write)
         for feed_url in feed_urls:
             try:
@@ -284,6 +309,8 @@ class SemanticPipeline:
         news_feed_urls: list[str] | None = None,
         write: bool = False,
     ) -> PipelineRunSummary:
+        """Run the full pipeline across seeds, YouTube feeds and news feeds."""
+
         summary = PipelineRunSummary(write_enabled=write)
         partials = [
             self.run_seed_urls(limit=seed_limit, write=write),
@@ -303,11 +330,13 @@ class SemanticPipeline:
         max_urls: int = 300,
         write: bool = False,
     ) -> PipelineRunSummary:
-        """Crawl all pages of a single domain using its configured sitemap.
+        """Crawl a single configured domain through its sitemap.
 
-        For each URL: fetch with domain-specific selector → build document
-        with domain category → optionally write to domain subfolder.
+        For each URL, the pipeline fetches with the domain selector, builds
+        the document with the domain category and optionally writes it to the
+        domain subfolder.
         """
+
         from semantic_layer_fvl.domains import DOMAIN_CONFIGS
         from semantic_layer_fvl.extractors.sitemap_extractor import fetch_domain_urls
 
@@ -319,13 +348,15 @@ class SemanticPipeline:
         base_url = str(self.settings.target_base_url).rstrip("/")
         urls = fetch_domain_urls(base_url, config)[:max_urls]
         logger.info(
-            "[pipeline] Domain '%s': %d URL(s) to process", domain_name, len(urls)
+            "[pipeline] Domain '%s': %d URL(s) to process",
+            domain_name,
+            len(urls),
         )
 
         summary = PipelineRunSummary(write_enabled=write)
         for url in urls:
             try:
-                logger.info("[pipeline] %s → %s", domain_name, url)
+                logger.info("[pipeline] %s -> %s", domain_name, url)
                 raw_page = self.crawler.fetch_domain_page(url, config)
                 if raw_page is None:
                     summary.results.append(
@@ -355,7 +386,10 @@ class SemanticPipeline:
                     domain_name=domain_name,
                 )
                 output_path = (
-                    self.writer.write(processed, domain_folder=config.output_folder)
+                    self.writer.write(
+                        processed,
+                        domain_folder=config.output_folder,
+                    )
                     if write
                     else None
                 )
@@ -380,6 +414,8 @@ class SemanticPipeline:
         return self._finalize_summary(summary)
 
     def save_summary(self, summary: PipelineRunSummary) -> Path:
+        """Persist a pipeline summary to the runs directory."""
+
         self.settings.resolved_runs_dir.mkdir(parents=True, exist_ok=True)
         timestamp = summary.started_at.astimezone(UTC).strftime("%Y%m%dT%H%M%SZ")
         output_path = self.settings.resolved_runs_dir / f"run-summary-{timestamp}.json"
@@ -396,6 +432,8 @@ class SemanticPipeline:
         processed: ProcessedDocument,
         output_path: Path | None,
     ) -> PipelineItemResult:
+        """Build a successful pipeline item result."""
+
         return PipelineItemResult(
             source_type=source_type,
             input_reference=input_reference,
@@ -416,6 +454,8 @@ class SemanticPipeline:
         input_reference: str,
         error: Exception,
     ) -> PipelineItemResult:
+        """Build a failed pipeline item result."""
+
         return PipelineItemResult(
             source_type=source_type,
             input_reference=input_reference,
@@ -425,5 +465,7 @@ class SemanticPipeline:
 
     @staticmethod
     def _finalize_summary(summary: PipelineRunSummary) -> PipelineRunSummary:
+        """Stamp the summary with the completion time and return it."""
+
         summary.finished_at = datetime.now(UTC)
         return summary

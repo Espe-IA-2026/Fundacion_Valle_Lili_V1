@@ -28,10 +28,18 @@ class NewsFeedExtractor:
 
         root = ET.fromstring(response.text)
         if self._local_name(root.tag) == "rss":
-            return self._parse_rss(response.text, response.status_code, response.headers.get("content-type"))
-        return self._parse_atom(root, response.status_code, response.headers.get("content-type"))
+            return self._parse_rss(
+                response.text,
+                response.status_code,
+                response.headers.get("content-type"),
+            )
+        return self._parse_atom(
+            root, response.status_code, response.headers.get("content-type")
+        )
 
-    def _parse_rss(self, xml_text: str, status_code: int, content_type: str | None) -> list[RawPage]:
+    def _parse_rss(
+        self, xml_text: str, status_code: int, content_type: str | None
+    ) -> list[RawPage]:
         root = ET.fromstring(xml_text)
         channel = root.find("channel")
         if channel is None:
@@ -56,7 +64,9 @@ class NewsFeedExtractor:
                 http_status=status_code,
                 content_type=content_type,
             )
-            text_content = "\n\n".join(part for part in [title, description, published] if part)
+            text_content = "\n\n".join(
+                part for part in [title, description, published] if part
+            )
             pages.append(
                 RawPage(
                     url=link,
@@ -68,7 +78,9 @@ class NewsFeedExtractor:
 
         return pages
 
-    def _parse_atom(self, root: ET.Element, status_code: int, content_type: str | None) -> list[RawPage]:
+    def _parse_atom(
+        self, root: ET.Element, status_code: int, content_type: str | None
+    ) -> list[RawPage]:
         source_name = self._find_text_ns(root, "title") or self.source_name
         pages: list[RawPage] = []
         entries = [child for child in root if self._local_name(child.tag) == "entry"]
@@ -79,8 +91,12 @@ class NewsFeedExtractor:
             if not link or not title:
                 continue
 
-            summary = self._find_text_ns(entry, "summary") or self._find_text_ns(entry, "content")
-            published = self._find_text_ns(entry, "updated") or self._find_text_ns(entry, "published")
+            summary = self._find_text_ns(entry, "summary") or self._find_text_ns(
+                entry, "content"
+            )
+            published = self._find_text_ns(entry, "updated") or self._find_text_ns(
+                entry, "published"
+            )
             metadata = ExtractionMetadata(
                 source_url=link,
                 source_name=source_name,
@@ -88,7 +104,9 @@ class NewsFeedExtractor:
                 http_status=status_code,
                 content_type=content_type,
             )
-            text_content = "\n\n".join(part for part in [title, summary, published] if part)
+            text_content = "\n\n".join(
+                part for part in [title, summary, published] if part
+            )
             pages.append(
                 RawPage(
                     url=link,

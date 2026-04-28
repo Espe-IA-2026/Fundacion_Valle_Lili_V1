@@ -3,11 +3,12 @@ from __future__ import annotations
 import logging
 import re
 from html.parser import HTMLParser
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
 from bs4 import BeautifulSoup
 from markdownify import markdownify as md
+from pydantic import AnyHttpUrl
 
 from semantic_layer_fvl.config import Settings, get_settings
 from semantic_layer_fvl.extractors.http_client import HttpClient
@@ -17,17 +18,43 @@ from semantic_layer_fvl.schemas import ExtractionMetadata, RawPage
 if TYPE_CHECKING:
     from semantic_layer_fvl.domains import DomainConfig
 
-_DOMAIN_NOISE_SELECTOR = "nav, figure, footer, header, .social-share, script, style, noscript"
+_DOMAIN_NOISE_SELECTOR = (
+    "nav, figure, footer, header, .social-share, script, style, noscript"
+)
 
 logger = logging.getLogger(__name__)
 
 _NON_HTML_EXTENSIONS = frozenset(
     {
-        ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".svg", ".webp", ".ico",
-        ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
-        ".zip", ".rar", ".tar", ".gz",
-        ".mp3", ".mp4", ".avi", ".mov", ".wmv",
-        ".css", ".js", ".json", ".xml", ".rss", ".atom",
+        ".pdf",
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".gif",
+        ".svg",
+        ".webp",
+        ".ico",
+        ".doc",
+        ".docx",
+        ".xls",
+        ".xlsx",
+        ".ppt",
+        ".pptx",
+        ".zip",
+        ".rar",
+        ".tar",
+        ".gz",
+        ".mp3",
+        ".mp4",
+        ".avi",
+        ".mov",
+        ".wmv",
+        ".css",
+        ".js",
+        ".json",
+        ".xml",
+        ".rss",
+        ".atom",
     }
 )
 
@@ -261,7 +288,9 @@ class WebCrawler:
         "Cache-Control": "no-cache",
     }
 
-    def fetch_domain_page(self, url: str, config: DomainConfig) -> RawPage | None:
+    def fetch_domain_page(
+        self, url: AnyHttpUrl, config: DomainConfig
+    ) -> RawPage | None:
         """Fetch a page using domain-specific CSS selector and convert to Markdown.
 
         Uses browser-like headers to avoid 403 blocks, BeautifulSoup to find
@@ -274,7 +303,7 @@ class WebCrawler:
         self.client.rate_limiter.wait()
         try:
             response = req_lib.get(
-                url,
+                str(url),
                 headers=self._BROWSER_HEADERS,
                 timeout=self.settings.request_timeout,
             )
@@ -297,7 +326,9 @@ class WebCrawler:
             )
             container = soup.body or soup
 
-        markdown_content = md(str(container), heading_style="ATX", strip=["script", "style"])
+        markdown_content = md(
+            str(container), heading_style="ATX", strip=["script", "style"]
+        )
 
         extra: dict[str, str] = {}
         for field_name, selector in config.extra_metadata_selectors.items():
@@ -307,8 +338,8 @@ class WebCrawler:
 
         h1 = soup.find("h1")
         title_tag = soup.find("title")
-        raw_title = (h1 or title_tag)
-        title = raw_title.get_text(strip=True)[:200] if raw_title else url
+        raw_title = h1 or title_tag
+        title = raw_title.get_text(strip=True)[:200] if raw_title else str(url)
 
         return RawPage(
             url=url,
@@ -318,7 +349,7 @@ class WebCrawler:
             markdown=markdown_content,
             extra_metadata=extra,
             metadata=ExtractionMetadata(
-                source_url=str(response.url),
+                source_url=cast(AnyHttpUrl, response.url),
                 source_name=self.source_name,
                 extractor_name="domain_web_crawler",
                 http_status=response.status_code,
@@ -326,15 +357,15 @@ class WebCrawler:
             ),
         )
 
-    def fetch(self, url: str) -> RawPage:
+    def fetch(self, url: AnyHttpUrl) -> RawPage:
         if self.settings.respect_robots_txt:
-            decision = self.robots_policy.evaluate(url)
+            decision = self.robots_policy.evaluate(str(url))
             if not decision.allowed:
                 raise CrawlBlockedError(
                     f"URL blocked by robots policy: {url} ({decision.reason})"
                 )
 
-        response = self.client.get(url)
+        response = self.client.get(str(url))
         response.raise_for_status()
         html = decode_html(response)
         meta_description = extract_meta_description(html)
@@ -342,15 +373,16 @@ class WebCrawler:
         if meta_description and not has_primary:
             text_content = f"{meta_description}\n\n{text_content}".strip()
 
+        source_url = cast(AnyHttpUrl, response.url)
         metadata = ExtractionMetadata(
-            source_url=str(response.url),
+            source_url=source_url,
             source_name=self.source_name,
             extractor_name="web_crawler",
             http_status=response.status_code,
             content_type=response.headers.get("content-type"),
         )
         return RawPage(
-            url=str(response.url),
+            url=source_url,
             title=extract_title(html),
             html=html,
             text_content=text_content,

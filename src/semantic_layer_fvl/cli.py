@@ -1,3 +1,5 @@
+"""Interfaz de linea de comandos para semantic_layer_fvl."""
+
 from __future__ import annotations
 
 import argparse
@@ -8,6 +10,8 @@ from semantic_layer_fvl.orchestrator import SemanticPipeline
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Construye y devuelve el analizador de argumentos."""
+
     parser = argparse.ArgumentParser(
         prog="semantic-layer-fvl",
         description="Herramientas base del proyecto de capa semantica.",
@@ -24,7 +28,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     crawl_once_parser = subparsers.add_parser(
         "crawl-once",
-        help="Extrae una URL, la procesa y opcionalmente la escribe como Markdown.",
+        help=(
+            "Extrae una URL, la procesa y opcionalmente la escribe como " "Markdown."
+        ),
     )
     crawl_once_parser.add_argument("url", help="URL publica a procesar.")
     crawl_once_parser.add_argument(
@@ -74,7 +80,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     crawl_discover_parser = subparsers.add_parser(
         "crawl-discover",
-        help="Rastrea el sitio descubriendo nuevos enlaces desde las semillas (BFS).",
+        help=(
+            "Rastrea el sitio descubriendo nuevos enlaces desde las " "semillas (BFS)."
+        ),
     )
     crawl_discover_parser.add_argument(
         "--max-pages",
@@ -94,7 +102,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run_all_parser = subparsers.add_parser(
         "run-all",
-        help="Ejecuta una corrida compuesta con semillas, feeds de YouTube y feeds de noticias.",
+        help=(
+            "Ejecuta una corrida compuesta con semillas, feeds de YouTube "
+            "y feeds de noticias."
+        ),
     )
     run_all_parser.add_argument(
         "--seed-limit",
@@ -153,6 +164,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def handle_show_config() -> int:
+    """Muestra la configuracion cargada desde variables de entorno."""
+
     settings = get_settings()
     print(f"project_name={settings.project_name}")
     print(f"target_base_url={settings.target_base_url}")
@@ -163,6 +176,8 @@ def handle_show_config() -> int:
 
 
 def handle_list_seeds() -> int:
+    """Lista las URLs semilla configuradas para el sitio objetivo."""
+
     settings = get_settings()
     for record in build_seed_urls(str(settings.target_base_url)):
         category = record.category.value if record.category else "sin_categoria"
@@ -171,6 +186,8 @@ def handle_list_seeds() -> int:
 
 
 def handle_crawl_once(url: str, *, write: bool) -> int:
+    """Procesa una URL publica y opcionalmente escribe Markdown."""
+
     pipeline = SemanticPipeline()
     processed, output_path = pipeline.process_url(url, write=write)
 
@@ -184,6 +201,8 @@ def handle_crawl_once(url: str, *, write: bool) -> int:
 
 
 def handle_youtube_feed(feed_url: str, *, write: bool) -> int:
+    """Procesa un feed Atom publico de YouTube."""
+
     pipeline = SemanticPipeline()
     results = pipeline.process_youtube_feed(feed_url, write=write)
 
@@ -196,6 +215,8 @@ def handle_youtube_feed(feed_url: str, *, write: bool) -> int:
 
 
 def handle_news_feed(feed_url: str, *, write: bool) -> int:
+    """Procesa un feed RSS o Atom de noticias."""
+
     pipeline = SemanticPipeline()
     results = pipeline.process_news_feed(feed_url, write=write)
 
@@ -208,6 +229,8 @@ def handle_news_feed(feed_url: str, *, write: bool) -> int:
 
 
 def print_summary(summary, *, summary_path: str | None = None) -> None:
+    """Imprime un resumen compacto de una corrida."""
+
     print(f"processed={summary.processed_count}")
     print(f"success={summary.success_count}")
     print(f"failure={summary.failure_count}")
@@ -235,6 +258,8 @@ def handle_crawl_domain(
     write: bool,
     save_summary: bool,
 ) -> int:
+    """Crawlea un dominio especifico usando su sitemap XML."""
+
     pipeline = SemanticPipeline()
     summary = pipeline.run_domain(domain_name=domain, max_urls=max_urls, write=write)
     summary_path = str(pipeline.save_summary(summary)) if save_summary else None
@@ -244,6 +269,8 @@ def handle_crawl_domain(
 
 
 def handle_crawl_discover(*, max_pages: int, write: bool, save_summary: bool) -> int:
+    """Rastrea el sitio descubriendo nuevos enlaces desde semillas."""
+
     pipeline = SemanticPipeline()
     summary = pipeline.run_with_discovery(max_pages=max_pages, write=write)
     summary_path = str(pipeline.save_summary(summary)) if save_summary else None
@@ -252,6 +279,8 @@ def handle_crawl_discover(*, max_pages: int, write: bool, save_summary: bool) ->
 
 
 def handle_crawl_seeds(*, limit: int | None, write: bool, save_summary: bool) -> int:
+    """Procesa las URLs semilla configuradas para el sitio objetivo."""
+
     pipeline = SemanticPipeline()
     summary = pipeline.run_seed_urls(limit=limit, write=write)
     summary_path = str(pipeline.save_summary(summary)) if save_summary else None
@@ -267,6 +296,8 @@ def handle_run_all(
     write: bool,
     save_summary: bool,
 ) -> int:
+    """Ejecuta una corrida compuesta con semillas y feeds."""
+
     pipeline = SemanticPipeline()
     summary = pipeline.run_all(
         seed_limit=seed_limit,
@@ -280,6 +311,8 @@ def handle_run_all(
 
 
 def main() -> int:
+    """Punto de entrada de la CLI."""
+
     parser = build_parser()
     args = parser.parse_args()
     configure_logging()

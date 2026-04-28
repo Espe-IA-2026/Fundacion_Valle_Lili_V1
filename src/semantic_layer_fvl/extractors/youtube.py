@@ -6,7 +6,10 @@ from semantic_layer_fvl.config import Settings, get_settings
 from semantic_layer_fvl.extractors.http_client import HttpClient
 from semantic_layer_fvl.schemas import ExtractionMetadata, RawPage
 
-ATOM_NS = {"atom": "http://www.w3.org/2005/Atom", "media": "http://search.yahoo.com/mrss/"}
+ATOM_NS = {
+    "atom": "http://www.w3.org/2005/Atom",
+    "media": "http://search.yahoo.com/mrss/",
+}
 
 
 class YouTubeFeedExtractor:
@@ -45,7 +48,12 @@ class YouTubeFeedExtractor:
                 http_status=response.status_code,
                 content_type=response.headers.get("content-type"),
             )
-            parts = [title, description, f"Autor: {author}" if author else None, published]
+            parts = [
+                title,
+                description,
+                f"Autor: {author}" if author else None,
+                published,
+            ]
             text_content = "\n\n".join(part for part in parts if part)
             pages.append(
                 RawPage(
