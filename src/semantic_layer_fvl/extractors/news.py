@@ -3,9 +3,14 @@ from __future__ import annotations
 import email.utils
 import xml.etree.ElementTree as ET
 
+from pydantic import AnyHttpUrl, TypeAdapter
+
 from semantic_layer_fvl.config import Settings, get_settings
 from semantic_layer_fvl.extractors.http_client import HttpClient
 from semantic_layer_fvl.schemas import ExtractionMetadata, RawPage
+
+
+_HTTP_URL_ADAPTER = TypeAdapter(AnyHttpUrl)
 
 
 class NewsFeedExtractor:
@@ -55,10 +60,12 @@ class NewsFeedExtractor:
             if not link or not title:
                 continue
 
+            normalized_link = _HTTP_URL_ADAPTER.validate_python(link)
+
             description = self._find_text(item, "description")
             published = self._normalize_datetime(self._find_text(item, "pubDate"))
             metadata = ExtractionMetadata(
-                source_url=link,
+                source_url=normalized_link,
                 source_name=source_name,
                 extractor_name="news_feed",
                 http_status=status_code,
@@ -69,7 +76,7 @@ class NewsFeedExtractor:
             )
             pages.append(
                 RawPage(
-                    url=link,
+                    url=normalized_link,
                     title=title,
                     text_content=text_content,
                     metadata=metadata,
@@ -91,6 +98,8 @@ class NewsFeedExtractor:
             if not link or not title:
                 continue
 
+            normalized_link = _HTTP_URL_ADAPTER.validate_python(link)
+
             summary = self._find_text_ns(entry, "summary") or self._find_text_ns(
                 entry, "content"
             )
@@ -98,7 +107,7 @@ class NewsFeedExtractor:
                 entry, "published"
             )
             metadata = ExtractionMetadata(
-                source_url=link,
+                source_url=normalized_link,
                 source_name=source_name,
                 extractor_name="news_feed",
                 http_status=status_code,
@@ -109,7 +118,7 @@ class NewsFeedExtractor:
             )
             pages.append(
                 RawPage(
-                    url=link,
+                    url=normalized_link,
                     title=title,
                     text_content=text_content,
                     metadata=metadata,

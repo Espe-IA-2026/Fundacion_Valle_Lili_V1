@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from urllib.parse import urljoin
 
+from pydantic import AnyHttpUrl, TypeAdapter
+
 from semantic_layer_fvl.schemas import DocumentCategory, UrlRecord
 
 DEFAULT_SEED_PATHS: tuple[tuple[str, DocumentCategory, int, str], ...] = (
@@ -63,12 +65,14 @@ DEFAULT_SEED_PATHS: tuple[tuple[str, DocumentCategory, int, str], ...] = (
     ),
 )
 
+_HTTP_URL_ADAPTER = TypeAdapter(AnyHttpUrl)
 
-def build_seed_urls(base_url: str) -> list[UrlRecord]:
+
+def build_seed_urls(base_url: str | AnyHttpUrl) -> list[UrlRecord]:
     normalized_base_url = str(base_url)
     records = [
         UrlRecord(
-            url=urljoin(normalized_base_url, path),
+            url=_HTTP_URL_ADAPTER.validate_python(urljoin(normalized_base_url, path)),
             category=category,
             priority=priority,
             notes=notes,
