@@ -19,7 +19,10 @@ if TYPE_CHECKING:
     from semantic_layer_fvl.domains import DomainConfig
 
 _DOMAIN_NOISE_SELECTOR = (
-    "nav, figure, footer, header, .social-share, script, style, noscript"
+    "nav, footer, header, aside, script, style, noscript, iframe, hr, "
+    "figure, svg, img, "
+    ".cnt_breadcrumbs, .social-share, "
+    ".elementor-location-header, .elementor-location-footer"
 )
 
 logger = logging.getLogger(__name__)
@@ -336,6 +339,7 @@ class WebCrawler:
         markdown_content = md(
             str(container), heading_style="ATX", strip=["script", "style"]
         )
+        markdown_content = re.sub(r"(?m)^(## )", r"---\n\n\1", markdown_content)
 
         extra: dict[str, str] = {}
         for field_name, selector in config.extra_metadata_selectors.items():
