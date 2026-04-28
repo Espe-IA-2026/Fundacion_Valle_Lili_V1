@@ -19,7 +19,8 @@ dependencies = [
     # Utils
     "python-dotenv>=1.0,<2.0",
     "pydantic>=2.11,<3.0",
-    "pydantic-settings>=2.14.0",
+    "pydantic-settings>=2.10,<3.0",
+    "markdownify>=0.12,<1.0",
 ]
 
 [dependency-groups]
@@ -32,8 +33,11 @@ dev = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[project.scripts]
+semantic-layer-fvl = "semantic_layer_fvl.cli:main"
+
 [tool.hatch.build.targets.wheel]
-packages = ["scraper", "app"]
+packages = ["src/semantic_layer_fvl", "scraper", "app"]
 
 [tool.pytest.ini_options]
 addopts = "-p no:cacheprovider"

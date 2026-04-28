@@ -52,6 +52,7 @@ class RawPage(BaseModel):
     markdown: str | None = None
     text_content: str | None = None
     metadata: ExtractionMetadata
+    extra_metadata: dict[str, str] = Field(default_factory=dict)
 
 
 class SourceDocument(BaseModel):
@@ -73,5 +74,6 @@ class ProcessedDocument(BaseModel):
     headings: list[str] = Field(default_factory=list)
     related_urls: list[AnyHttpUrl] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    extra_metadata: dict[str, str] = Field(default_factory=dict)
 
 

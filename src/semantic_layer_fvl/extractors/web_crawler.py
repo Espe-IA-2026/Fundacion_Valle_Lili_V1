@@ -1,13 +1,25 @@
 from __future__ import annotations
 
+import logging
 import re
 from html.parser import HTMLParser
+from typing import TYPE_CHECKING
 from urllib.parse import urljoin, urlsplit, urlunsplit
+
+from bs4 import BeautifulSoup
+from markdownify import markdownify as md
 
 from semantic_layer_fvl.config import Settings, get_settings
 from semantic_layer_fvl.extractors.http_client import HttpClient
 from semantic_layer_fvl.extractors.robots import RobotsPolicy
 from semantic_layer_fvl.schemas import ExtractionMetadata, RawPage
+
+if TYPE_CHECKING:
+    from semantic_layer_fvl.domains import DomainConfig
+
+_DOMAIN_NOISE_SELECTOR = "nav, figure, footer, header, .social-share, script, style, noscript"
+
+logger = logging.getLogger(__name__)
 
 _NON_HTML_EXTENSIONS = frozenset(
     {
@@ -238,6 +250,81 @@ class WebCrawler:
         self.client = client or HttpClient(self.settings)
         self.robots_policy = robots_policy or RobotsPolicy(self.settings.user_agent)
         self.source_name = source_name
+
+    _BROWSER_HEADERS = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "es-CO,es;q=0.9,en;q=0.8",
+        "Cache-Control": "no-cache",
+    }
+
+    def fetch_domain_page(self, url: str, config: DomainConfig) -> RawPage | None:
+        """Fetch a page using domain-specific CSS selector and convert to Markdown.
+
+        Uses browser-like headers to avoid 403 blocks, BeautifulSoup to find
+        the domain container, and markdownify to produce structured Markdown.
+        Falls back to <body> if the configured container selector is not found.
+        Returns None only on network/HTTP errors.
+        """
+        import requests as req_lib
+
+        self.client.rate_limiter.wait()
+        try:
+            response = req_lib.get(
+                url,
+                headers=self._BROWSER_HEADERS,
+                timeout=self.settings.request_timeout,
+            )
+            response.raise_for_status()
+        except Exception as exc:
+            logger.warning("[domain_crawler] Could not fetch %s: %s", url, exc)
+            return None
+
+        soup = BeautifulSoup(response.content, "html.parser")
+
+        for tag in soup.select(_DOMAIN_NOISE_SELECTOR):
+            tag.decompose()
+
+        container = soup.select_one(config.container_selector)
+        if container is None:
+            logger.warning(
+                "[domain_crawler] Selector '%s' not found in %s — falling back to <body>",
+                config.container_selector,
+                url,
+            )
+            container = soup.body or soup
+
+        markdown_content = md(str(container), heading_style="ATX", strip=["script", "style"])
+
+        extra: dict[str, str] = {}
+        for field_name, selector in config.extra_metadata_selectors.items():
+            el = soup.select_one(selector)
+            if el:
+                extra[field_name] = el.get_text(separator=" ", strip=True)
+
+        h1 = soup.find("h1")
+        title_tag = soup.find("title")
+        raw_title = (h1 or title_tag)
+        title = raw_title.get_text(strip=True)[:200] if raw_title else url
+
+        return RawPage(
+            url=url,
+            title=title,
+            html=response.text,
+            text_content=markdown_content,
+            markdown=markdown_content,
+            extra_metadata=extra,
+            metadata=ExtractionMetadata(
+                source_url=str(response.url),
+                source_name=self.source_name,
+                extractor_name="domain_web_crawler",
+                http_status=response.status_code,
+                content_type=response.headers.get("content-type"),
+            ),
+        )
 
     def fetch(self, url: str) -> RawPage:
         if self.settings.respect_robots_txt:

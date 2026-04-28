@@ -273,6 +273,87 @@ class SemanticPipeline:
 
         return self._finalize_summary(summary)
 
+    def run_domain(
+        self,
+        domain_name: str,
+        *,
+        max_urls: int = 300,
+        write: bool = False,
+    ) -> PipelineRunSummary:
+        """Crawl all pages of a single domain using its configured sitemap.
+
+        For each URL: fetch with domain-specific selector → build document
+        with domain category → optionally write to domain subfolder.
+        """
+        from semantic_layer_fvl.domains import DOMAIN_CONFIGS
+        from semantic_layer_fvl.extractors.sitemap_extractor import fetch_domain_urls
+
+        config = DOMAIN_CONFIGS.get(domain_name)
+        if config is None:
+            known = ", ".join(DOMAIN_CONFIGS)
+            raise ValueError(f"Unknown domain '{domain_name}'. Valid options: {known}")
+
+        base_url = str(self.settings.target_base_url).rstrip("/")
+        urls = fetch_domain_urls(base_url, config)[:max_urls]
+        logger.info("[pipeline] Domain '%s': %d URL(s) to process", domain_name, len(urls))
+
+        summary = PipelineRunSummary(write_enabled=write)
+        for url in urls:
+            try:
+                logger.info("[pipeline] %s → %s", domain_name, url)
+                raw_page = self.crawler.fetch_domain_page(url, config)
+                if raw_page is None:
+                    summary.results.append(
+                        PipelineItemResult(
+                            source_type="web_domain",
+                            input_reference=url,
+                            success=False,
+                            error="fetch returned None (network or HTTP error)",
+                        )
+                    )
+                    continue
+
+                if not (raw_page.text_content or "").strip():
+                    summary.results.append(
+                        PipelineItemResult(
+                            source_type="web_domain",
+                            input_reference=url,
+                            success=False,
+                            error="empty content after extraction",
+                        )
+                    )
+                    continue
+
+                processed = self.structurer.build_document(
+                    raw_page,
+                    raw_page.text_content or "",
+                    domain_name=domain_name,
+                )
+                output_path = (
+                    self.writer.write(processed, domain_folder=config.output_folder)
+                    if write
+                    else None
+                )
+                summary.results.append(
+                    self._build_success_result(
+                        source_type="web_domain",
+                        input_reference=url,
+                        processed=processed,
+                        output_path=output_path,
+                    )
+                )
+            except Exception as exc:
+                logger.exception("[pipeline] Error processing %s", url)
+                summary.results.append(
+                    self._build_failure_result(
+                        source_type="web_domain",
+                        input_reference=url,
+                        error=exc,
+                    )
+                )
+
+        return self._finalize_summary(summary)
+
     def save_summary(self, summary: PipelineRunSummary) -> Path:
         self.settings.resolved_runs_dir.mkdir(parents=True, exist_ok=True)
         timestamp = summary.started_at.astimezone(UTC).strftime("%Y%m%dT%H%M%SZ")
