@@ -16,7 +16,10 @@ PATH_CATEGORY_RULES: tuple[tuple[str, DocumentCategory], ...] = (
     # More-specific paths before their parent prefixes
     ("/nuestra-institucion/nuestras-sedes", DocumentCategory.SEDES_UBICACIONES),
     ("/nuestra-institucion/marco-legal", DocumentCategory.NORMATIVIDAD),
-    ("/nuestra-institucion/politica-de-tratamiento-de-datos", DocumentCategory.NORMATIVIDAD),
+    (
+        "/nuestra-institucion/politica-de-tratamiento-de-datos",
+        DocumentCategory.NORMATIVIDAD,
+    ),
     ("/nuestra-institucion", DocumentCategory.ORGANIZACION),
     ("/quienes-somos", DocumentCategory.ORGANIZACION),
     ("/atencion-al-paciente/educacion-al-paciente", DocumentCategory.EDUCACION),
@@ -41,7 +44,10 @@ PATH_CATEGORY_RULES: tuple[tuple[str, DocumentCategory], ...] = (
 KEYWORD_CATEGORY_RULES: tuple[tuple[tuple[str, ...], DocumentCategory], ...] = (
     (("mision", "vision", "historia"), DocumentCategory.ORGANIZACION),
     (("servicio", "especialidad", "consulta"), DocumentCategory.SERVICIOS),
-    (("doctor", "medico", "especialista", "directorio"), DocumentCategory.TALENTO_HUMANO),
+    (
+        ("doctor", "medico", "especialista", "directorio"),
+        DocumentCategory.TALENTO_HUMANO,
+    ),
     (("sede", "ubicacion", "direccion"), DocumentCategory.SEDES_UBICACIONES),
     (("contacto", "telefono", "correo"), DocumentCategory.CONTACTO),
     (("politica", "derechos", "normatividad"), DocumentCategory.NORMATIVIDAD),
@@ -53,7 +59,9 @@ KEYWORD_CATEGORY_RULES: tuple[tuple[tuple[str, ...], DocumentCategory], ...] = (
 
 
 def slugify(value: str) -> str:
-    normalized = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode("ascii")
+    normalized = (
+        unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode("ascii")
+    )
     normalized = re.sub(r"[^a-zA-Z0-9]+", "-", normalized).strip("-").lower()
     return normalized or "documento"
 
@@ -78,7 +86,9 @@ class SemanticStructurer:
             return DocumentCategory.ORGANIZACION
 
         # Include URL path so slugs like /investigacion-* match keyword rules
-        combined_text = " ".join(filter(None, [raw_page.title, cleaned_text, path])).casefold()
+        combined_text = " ".join(
+            filter(None, [raw_page.title, cleaned_text, path])
+        ).casefold()
         for keywords, category in KEYWORD_CATEGORY_RULES:
             if any(keyword in combined_text for keyword in keywords):
                 return category
@@ -95,6 +105,7 @@ class SemanticStructurer:
     ) -> ProcessedDocument:
         if domain_name is not None:
             from semantic_layer_fvl.domains import DOMAIN_CONFIGS
+
             domain_cfg = DOMAIN_CONFIGS[domain_name]
             resolved_category = DocumentCategory(domain_cfg.category)
         else:
@@ -115,10 +126,14 @@ class SemanticStructurer:
             title=title,
             slug=slug,
             category=resolved_category,
-            source_url=str(raw_page.url),
+            source_url=raw_page.url,
             source_name=raw_page.metadata.source_name,
             summary=summary,
-            status=PublicationStatus.READY if markdown_body.strip() else PublicationStatus.DRAFT,
+            status=(
+                PublicationStatus.READY
+                if markdown_body.strip()
+                else PublicationStatus.DRAFT
+            ),
             extraction_metadata=raw_page.metadata,
         )
         return ProcessedDocument(
@@ -159,7 +174,9 @@ class SemanticStructurer:
 
     @staticmethod
     def _build_markdown_body(title: str, cleaned_text: str) -> str:
-        paragraphs = [chunk.strip() for chunk in cleaned_text.split("\n\n") if chunk.strip()]
+        paragraphs = [
+            chunk.strip() for chunk in cleaned_text.split("\n\n") if chunk.strip()
+        ]
         lines = [f"# {title}", ""]
 
         if not paragraphs:

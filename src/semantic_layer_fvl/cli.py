@@ -164,7 +164,7 @@ def handle_show_config() -> int:
 
 def handle_list_seeds() -> int:
     settings = get_settings()
-    for record in build_seed_urls(settings.target_base_url):
+    for record in build_seed_urls(str(settings.target_base_url)):
         category = record.category.value if record.category else "sin_categoria"
         print(f"{record.priority:03d} {category} {record.url}")
     return 0
@@ -177,7 +177,7 @@ def handle_crawl_once(url: str, *, write: bool) -> int:
     print(f'title="{processed.document.title}"')
     print(f'category="{processed.document.category.value}"')
     print(f'slug="{processed.document.slug}"')
-    print(f'headings={len(processed.headings)}')
+    print(f"headings={len(processed.headings)}")
     if output_path is not None:
         print(f'output_path="{output_path}"')
     return 0
@@ -216,7 +216,9 @@ def print_summary(summary, *, summary_path: str | None = None) -> None:
 
     for result in summary.results[:5]:
         status = "ok" if result.success else "error"
-        line = f'{status} source="{result.source_type}" input="{result.input_reference}"'
+        line = (
+            f'{status} source="{result.source_type}" input="{result.input_reference}"'
+        )
         if result.title:
             line += f' title="{result.title}"'
         if result.output_path:

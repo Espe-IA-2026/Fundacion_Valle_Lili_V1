@@ -3,11 +3,16 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Literal
 
 from semantic_layer_fvl.config import Settings, get_settings
 from semantic_layer_fvl.extractors.news import NewsFeedExtractor
 from semantic_layer_fvl.extractors.site_map import build_seed_urls
-from semantic_layer_fvl.extractors.web_crawler import CrawlBlockedError, WebCrawler, extract_links
+from semantic_layer_fvl.extractors.web_crawler import (
+    CrawlBlockedError,
+    WebCrawler,
+    extract_links,
+)
 from semantic_layer_fvl.extractors.youtube import YouTubeFeedExtractor
 from semantic_layer_fvl.processors import SemanticStructurer, TextCleaner
 from semantic_layer_fvl.schemas import (
@@ -38,8 +43,12 @@ class SemanticPipeline:
     ) -> None:
         self.settings = settings or get_settings()
         self.crawler = crawler or WebCrawler(settings=self.settings)
-        self.youtube_extractor = youtube_extractor or YouTubeFeedExtractor(settings=self.settings)
-        self.news_extractor = news_extractor or NewsFeedExtractor(settings=self.settings)
+        self.youtube_extractor = youtube_extractor or YouTubeFeedExtractor(
+            settings=self.settings
+        )
+        self.news_extractor = news_extractor or NewsFeedExtractor(
+            settings=self.settings
+        )
         self.cleaner = cleaner or TextCleaner()
         self.structurer = structurer or SemanticStructurer()
         self.writer = writer or MarkdownWriter(self.settings)
@@ -51,7 +60,9 @@ class SemanticPipeline:
         category: DocumentCategory | None = None,
     ) -> ProcessedDocument:
         cleaned_text = self.cleaner.clean(raw_page.text_content)
-        processed = self.structurer.build_document(raw_page, cleaned_text, category=category)
+        processed = self.structurer.build_document(
+            raw_page, cleaned_text, category=category
+        )
         if not cleaned_text:
             processed.warnings.append("empty_cleaned_text")
         return processed
@@ -90,7 +101,9 @@ class SemanticPipeline:
         write: bool = False,
     ) -> list[tuple[ProcessedDocument, Path | None]]:
         raw_pages = self.youtube_extractor.fetch_feed(feed_url)
-        return self.process_raw_pages(raw_pages, category=DocumentCategory.MULTIMEDIA, write=write)
+        return self.process_raw_pages(
+            raw_pages, category=DocumentCategory.MULTIMEDIA, write=write
+        )
 
     def process_news_feed(
         self,
@@ -99,7 +112,9 @@ class SemanticPipeline:
         write: bool = False,
     ) -> list[tuple[ProcessedDocument, Path | None]]:
         raw_pages = self.news_extractor.fetch_feed(feed_url)
-        return self.process_raw_pages(raw_pages, category=DocumentCategory.NOTICIAS, write=write)
+        return self.process_raw_pages(
+            raw_pages, category=DocumentCategory.NOTICIAS, write=write
+        )
 
     def run_seed_urls(
         self,
@@ -107,7 +122,8 @@ class SemanticPipeline:
         limit: int | None = None,
         write: bool = False,
     ) -> PipelineRunSummary:
-        urls = [str(record.url) for record in build_seed_urls(self.settings.target_base_url)]
+        base_url = str(self.settings.target_base_url)
+        urls = [str(record.url) for record in build_seed_urls(base_url)]
         if limit is not None:
             urls = urls[:limit]
         return self.run_urls(urls, write=write)
@@ -124,7 +140,8 @@ class SemanticPipeline:
         skipped; other errors are recorded as failures in the summary.
         """
         summary = PipelineRunSummary(write_enabled=write)
-        seed_urls = [str(r.url) for r in build_seed_urls(self.settings.target_base_url)]
+        base_url = str(self.settings.target_base_url)
+        seed_urls = [str(r.url) for r in build_seed_urls(base_url)]
         queue: list[str] = list(dict.fromkeys(seed_urls))
         seen: set[str] = set(queue)
 
@@ -173,7 +190,9 @@ class SemanticPipeline:
         for url in urls:
             try:
                 logger.info("Processing web URL: %s", url)
-                processed, output_path = self.process_url(url, category=category, write=write)
+                processed, output_path = self.process_url(
+                    url, category=category, write=write
+                )
                 summary.results.append(
                     self._build_success_result(
                         source_type="web",
@@ -203,7 +222,9 @@ class SemanticPipeline:
         for feed_url in feed_urls:
             try:
                 logger.info("Processing YouTube feed: %s", feed_url)
-                for processed, output_path in self.process_youtube_feed(feed_url, write=write):
+                for processed, output_path in self.process_youtube_feed(
+                    feed_url, write=write
+                ):
                     summary.results.append(
                         self._build_success_result(
                             source_type="youtube_feed",
@@ -233,7 +254,9 @@ class SemanticPipeline:
         for feed_url in feed_urls:
             try:
                 logger.info("Processing news feed: %s", feed_url)
-                for processed, output_path in self.process_news_feed(feed_url, write=write):
+                for processed, output_path in self.process_news_feed(
+                    feed_url, write=write
+                ):
                     summary.results.append(
                         self._build_success_result(
                             source_type="news_feed",
@@ -295,7 +318,9 @@ class SemanticPipeline:
 
         base_url = str(self.settings.target_base_url).rstrip("/")
         urls = fetch_domain_urls(base_url, config)[:max_urls]
-        logger.info("[pipeline] Domain '%s': %d URL(s) to process", domain_name, len(urls))
+        logger.info(
+            "[pipeline] Domain '%s': %d URL(s) to process", domain_name, len(urls)
+        )
 
         summary = PipelineRunSummary(write_enabled=write)
         for url in urls:
@@ -364,7 +389,9 @@ class SemanticPipeline:
     @staticmethod
     def _build_success_result(
         *,
-        source_type: str,
+        source_type: Literal[
+            "web", "youtube_feed", "news_feed", "web_discovered", "web_domain"
+        ],
         input_reference: str,
         processed: ProcessedDocument,
         output_path: Path | None,
@@ -383,7 +410,9 @@ class SemanticPipeline:
     @staticmethod
     def _build_failure_result(
         *,
-        source_type: str,
+        source_type: Literal[
+            "web", "youtube_feed", "news_feed", "web_discovered", "web_domain"
+        ],
         input_reference: str,
         error: Exception,
     ) -> PipelineItemResult:
@@ -398,4 +427,3 @@ class SemanticPipeline:
     def _finalize_summary(summary: PipelineRunSummary) -> PipelineRunSummary:
         summary.finished_at = datetime.now(UTC)
         return summary
-
