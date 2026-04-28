@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     user_agent: str = "semantic-layer-fvl/0.1.0"
     accept_language: str = "es-CO,es;q=0.9,en;q=0.8"
 
-    target_base_url: AnyHttpUrl = "https://valledellili.org"
+    target_base_url: AnyHttpUrl = Field(default=AnyHttpUrl("https://valledellili.org"))
     respect_robots_txt: bool = True
 
     youtube_search_limit: int = Field(default=50, ge=1)
@@ -55,6 +55,7 @@ class Settings(BaseSettings):
         if self.runs_dir.is_absolute():
             return self.runs_dir
         return (self.project_root / self.runs_dir).resolve()
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
