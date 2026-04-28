@@ -91,12 +91,24 @@ class SemanticStructurer:
         cleaned_text: str,
         *,
         category: DocumentCategory | None = None,
+        domain_name: str | None = None,
     ) -> ProcessedDocument:
-        resolved_category = category or self.infer_category(raw_page, cleaned_text)
+        if domain_name is not None:
+            from semantic_layer_fvl.domains import DOMAIN_CONFIGS
+            domain_cfg = DOMAIN_CONFIGS[domain_name]
+            resolved_category = DocumentCategory(domain_cfg.category)
+        else:
+            resolved_category = category or self.infer_category(raw_page, cleaned_text)
+
         title = self._resolve_title(raw_page)
         slug = self._resolve_slug(raw_page, title)
-        summary = self._build_summary(cleaned_text)
-        markdown_body = self._build_markdown_body(title, cleaned_text)
+
+        if domain_name is not None and raw_page.markdown:
+            markdown_body = raw_page.markdown
+            summary = self._build_summary(raw_page.markdown)
+        else:
+            summary = self._build_summary(cleaned_text)
+            markdown_body = self._build_markdown_body(title, cleaned_text)
 
         source_document = SourceDocument(
             document_id=f"{resolved_category.value}-{slug}",
@@ -113,6 +125,7 @@ class SemanticStructurer:
             document=source_document,
             content_markdown=markdown_body,
             headings=self._extract_headings(markdown_body),
+            extra_metadata=dict(raw_page.extra_metadata),
         )
 
     @staticmethod

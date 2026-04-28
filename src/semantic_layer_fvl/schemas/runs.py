@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 
 class PipelineItemResult(BaseModel):
-    source_type: Literal["web", "youtube_feed", "news_feed", "web_discovered"]
+    source_type: Literal["web", "youtube_feed", "news_feed", "web_discovered", "web_domain"]
     input_reference: str
     success: bool
     title: str | None = None

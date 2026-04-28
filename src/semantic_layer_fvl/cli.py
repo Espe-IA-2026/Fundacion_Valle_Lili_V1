@@ -124,6 +124,31 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Guarda el resumen de corrida en el directorio de runs.",
     )
+    crawl_domain_parser = subparsers.add_parser(
+        "crawl-domain",
+        help="Crawlea un dominio especifico usando su sitemap XML.",
+    )
+    crawl_domain_parser.add_argument(
+        "domain",
+        choices=["servicios", "especialistas", "sedes", "institucional"],
+        help="Dominio a procesar.",
+    )
+    crawl_domain_parser.add_argument(
+        "--max-urls",
+        type=int,
+        default=300,
+        help="Limite de URLs a procesar (default: 300).",
+    )
+    crawl_domain_parser.add_argument(
+        "--write",
+        action="store_true",
+        help="Escribe los documentos .md en el directorio de salida.",
+    )
+    crawl_domain_parser.add_argument(
+        "--save-summary",
+        action="store_true",
+        help="Guarda el resumen de corrida en el directorio de runs.",
+    )
     return parser
 
 
@@ -201,6 +226,21 @@ def print_summary(summary, *, summary_path: str | None = None) -> None:
         print(line)
 
 
+def handle_crawl_domain(
+    *,
+    domain: str,
+    max_urls: int,
+    write: bool,
+    save_summary: bool,
+) -> int:
+    pipeline = SemanticPipeline()
+    summary = pipeline.run_domain(domain_name=domain, max_urls=max_urls, write=write)
+    summary_path = str(pipeline.save_summary(summary)) if save_summary else None
+    print(f"domain={domain}")
+    print_summary(summary, summary_path=summary_path)
+    return 0 if summary.failure_count == 0 else 1
+
+
 def handle_crawl_discover(*, max_pages: int, write: bool, save_summary: bool) -> int:
     pipeline = SemanticPipeline()
     summary = pipeline.run_with_discovery(max_pages=max_pages, write=write)
@@ -252,6 +292,13 @@ def main() -> int:
         return handle_youtube_feed(args.feed_url, write=args.write)
     if args.command == "news-feed":
         return handle_news_feed(args.feed_url, write=args.write)
+    if args.command == "crawl-domain":
+        return handle_crawl_domain(
+            domain=args.domain,
+            max_urls=args.max_urls,
+            write=args.write,
+            save_summary=args.save_summary,
+        )
     if args.command == "crawl-discover":
         return handle_crawl_discover(
             max_pages=args.max_pages,
