@@ -20,7 +20,7 @@ DOMAIN_CONFIGS: dict[str, DomainConfig] = {
     "servicios": DomainConfig(
         name="servicios",
         sitemap_paths=["servicios-sitemap.xml"],
-        container_selector="div.content-post",
+        container_selector="main",
         output_folder="servicios",
         category="02_servicios",
         url_include_patterns=["/servicios/", "/servicio/"],
@@ -33,22 +33,22 @@ DOMAIN_CONFIGS: dict[str, DomainConfig] = {
     "especialistas": DomainConfig(
         name="especialistas",
         sitemap_paths=["especialistas-sitemap.xml"],
-        container_selector="div.content-post",
+        container_selector="main",
         output_folder="especialistas",
         category="03_talento_humano",
         url_include_patterns=["/especialistas/", "/medicos/", "/directorio-medico/"],
         url_exclude_patterns=[],
         extra_metadata_selectors={
-            "especialidad": "[class*='especialidad'], .specialty",
-            "cargo": "[class*='cargo'], .position",
-            "educacion": "[class*='educacion'], .formacion",
+            "especialidad": "section.personal-sfaff-lite",
+            "cargo": "[class*='cargo'], [class*='position']",
+            "educacion": "[class*='educacion'], [class*='formacion']",
         },
         fallback_urls=["https://valledellili.org/directorio-medico/"],
     ),
     "sedes": DomainConfig(
         name="sedes",
         sitemap_paths=["sedes-sitemap.xml"],
-        container_selector="div.content-post",
+        container_selector="main",
         output_folder="sedes",
         category="04_sedes_ubicaciones",
         url_include_patterns=["/sedes/", "/sede/", "/ubicaciones/"],
@@ -62,7 +62,7 @@ DOMAIN_CONFIGS: dict[str, DomainConfig] = {
     "institucional": DomainConfig(
         name="institucional",
         sitemap_paths=["page-sitemap.xml", "wp-sitemap-posts-page-1.xml"],
-        container_selector="div.content-post",
+        container_selector="main",
         output_folder="institucional",
         category="01_organizacion",
         url_include_patterns=[
