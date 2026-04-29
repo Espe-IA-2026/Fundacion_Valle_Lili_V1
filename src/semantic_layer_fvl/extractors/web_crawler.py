@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import re
 from html.parser import HTMLParser
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
 from bs4 import BeautifulSoup
@@ -62,6 +62,25 @@ _NON_HTML_EXTENSIONS = frozenset(
         ".atom",
     }
 )
+
+_NOISE_MARKDOWN_LINES = {
+    "agenda una cita",
+    "autorizo",
+    "conoce más",
+    "contáctanos",
+    "contactanos",
+    "descubre aquí",
+    "directorio médico",
+    "mostrar todos",
+    "realizar pagos",
+    "solicitar cita por whatsapp",
+    "solicitar una llamada",
+    "scroll",
+    "ver especialidad",
+    "ver más recomendados",
+    "ver todos los servicios y especialidades",
+    "¿cómo llegar?",
+}
 
 
 class CrawlBlockedError(RuntimeError):
@@ -255,6 +274,109 @@ def extract_links(html: str, base_url: str) -> list[str]:
     return list(dict.fromkeys(parser.links))
 
 
+def _normalize_markdown_lines(markdown_content: str) -> str:
+    lines: list[str] = []
+    for raw_line in markdown_content.splitlines():
+        line = raw_line.rstrip()
+        stripped = line.strip()
+        if not stripped or stripped == "---":
+            if lines and lines[-1] != "":
+                lines.append("")
+            continue
+        if stripped.casefold() in _NOISE_MARKDOWN_LINES:
+            continue
+        lines.append(line)
+
+    while lines and lines[-1] == "":
+        lines.pop()
+
+    return "\n".join(lines).strip()
+
+
+def _render_specialist_entries(section_body: str) -> list[str]:
+    entries: list[str] = []
+    link_pattern = re.compile(r"\[(.*?)\]\((https?://[^)]+)\)", re.DOTALL)
+
+    for match in link_pattern.finditer(section_body):
+        label = match.group(1)
+        parts = [part.strip() for part in re.split(r"\r?\n+", label) if part.strip()]
+        cleaned_parts: list[str] = []
+        for part in parts:
+            if part.startswith("####"):
+                cleaned_parts.append(part[4:].strip())
+            else:
+                cleaned_parts.append(part)
+
+        if not cleaned_parts:
+            continue
+
+        name = cleaned_parts[0]
+        specialty = cleaned_parts[1] if len(cleaned_parts) > 1 else ""
+        entry = f"- {name} - {specialty}" if specialty else f"- {name}"
+        entries.append(entry.rstrip(" -"))
+
+    return entries
+
+
+def _reformat_specialists_section(markdown_content: str, heading: str) -> str:
+    pattern = re.compile(
+        rf"(?ms)^{re.escape(heading)}\s*(.*?)(?=^#{{1,6}}\s|\Z)",
+    )
+    match = pattern.search(markdown_content)
+    if match is None:
+        return markdown_content
+
+    entries = _render_specialist_entries(match.group(1))
+    if not entries:
+        return markdown_content[: match.start()] + heading + "\n"
+
+    replacement = heading + "\n\n" + "\n".join(entries) + "\n"
+    return (
+        markdown_content[: match.start()]
+        + replacement
+        + markdown_content[match.end() :]
+    )
+
+
+def _cut_markdown_at_headings(markdown_content: str, headings: list[str]) -> str:
+    if not headings:
+        return markdown_content
+
+    earliest_index: int | None = None
+    for heading in headings:
+        heading_pattern = re.compile(rf"(?im)^\s*{re.escape(heading)}\s*$")
+        match = heading_pattern.search(markdown_content)
+        if match is None:
+            continue
+        if earliest_index is None or match.start() < earliest_index:
+            earliest_index = match.start()
+
+    if earliest_index is None:
+        return markdown_content
+
+    return markdown_content[:earliest_index].rstrip()
+
+
+def _trim_before_first_h1(markdown_content: str) -> str:
+    match = re.search(r"(?m)^#\s+", markdown_content)
+    if match is None:
+        return markdown_content
+    return markdown_content[match.start() :].lstrip()
+
+
+def _clean_domain_markdown(markdown_content: str, config: DomainConfig) -> str:
+    cleaned = markdown_content.replace("\r\n", "\n").replace("\r", "\n")
+    if config.trim_before_first_h1:
+        cleaned = _trim_before_first_h1(cleaned)
+    if config.specialists_section_heading:
+        cleaned = _reformat_specialists_section(
+            cleaned, config.specialists_section_heading
+        )
+    cleaned = _cut_markdown_at_headings(cleaned, config.markdown_cutoff_headings)
+    cleaned = _normalize_markdown_lines(cleaned)
+    return cleaned
+
+
 def normalize_title(value: str) -> str:
     normalized = re.sub(r"\s+", " ", value).strip()
     normalized = re.sub(r"([a-záéíóúñ])([A-ZÁÉÍÓÚÑ])", r"\1 \2", normalized)
@@ -339,19 +461,32 @@ class WebCrawler:
         markdown_content = md(
             str(container), heading_style="ATX", strip=["script", "style"]
         )
-        markdown_content = re.sub(r'(?m)^(## )', r'---\n\n\1', markdown_content)
         markdown_content = re.sub(
-            r'(?:---\n\n)?## Otros especialistas.*',
-            '',
+            r"\[(Agenda una cita|Agenda tu cita|Ver especialidad|Ver todos los servicios y especialidades|Agendar cita médica|Agendar chequeo médico|Encontrar un especialista|Prepararme para exámenes médicos|Especialidades|Realizar pagos|Ver resultados médicos|Solicitar cita por Whatsapp|Solicitar una llamada|Directorio médico|Contáctenos|Conoce más|¿Cómo llegar\?|Preparación para exámenes y procedimientos|Hospital Padrino|Biblioteca|FVL al día|Buscar especialidad|Especialistas)\]\([^)]+\)",
+            "",
+            markdown_content,
+            flags=re.IGNORECASE,
+        )
+        markdown_content = re.sub(
+            r"\[Ver especialidad\]\([^)]+\)", "", markdown_content
+        )
+        markdown_content = re.sub(
+            r"\[Ver todos los servicios y especialidades\]\([^)]+\)",
+            "",
+            markdown_content,
+        )
+        markdown_content = re.sub(
+            r"(?:---\n\n)?## Otros especialistas.*",
+            "",
             markdown_content,
             flags=re.DOTALL | re.IGNORECASE,
         )
         markdown_content = re.sub(
-            r'\[([^\]\n]+)\]\(https?://[^\)\n]+/buscador-integral/[^\)\n]*\)',
-            r'\1',
+            r"\[([^\]\n]+)\]\(https?://[^\)\n]+/buscador-integral/[^\)\n]*\)",
+            r"\1",
             markdown_content,
         )
-        markdown_content = markdown_content.strip()
+        markdown_content = _clean_domain_markdown(markdown_content, config)
 
         extra: dict[str, str] = {}
         for field_name, selector in config.extra_metadata_selectors.items():

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -14,6 +14,9 @@ class DomainConfig:
     url_exclude_patterns: list[str]
     extra_metadata_selectors: dict[str, str]
     fallback_urls: list[str]
+    trim_before_first_h1: bool = False
+    markdown_cutoff_headings: list[str] = field(default_factory=list)
+    specialists_section_heading: str | None = None
 
 
 DOMAIN_CONFIGS: dict[str, DomainConfig] = {
@@ -29,6 +32,12 @@ DOMAIN_CONFIGS: dict[str, DomainConfig] = {
             "categoria": ".breadcrumb > *:last-child, .categoria",
         },
         fallback_urls=["https://valledellili.org/servicios/"],
+        trim_before_first_h1=True,
+        markdown_cutoff_headings=[
+            "### Otros servicios y especialidades",
+            "### Contenidos relacionados",
+        ],
+        specialists_section_heading="## Especialistas que pueden atenderte",
     ),
     "especialistas": DomainConfig(
         name="especialistas",
@@ -40,6 +49,11 @@ DOMAIN_CONFIGS: dict[str, DomainConfig] = {
         url_exclude_patterns=[],
         extra_metadata_selectors={},
         fallback_urls=["https://valledellili.org/directorio-medico/"],
+        trim_before_first_h1=True,
+        markdown_cutoff_headings=[
+            "### Otros servicios y especialidades",
+            "### Contenidos relacionados",
+        ],
     ),
     "sedes": DomainConfig(
         name="sedes",
@@ -54,6 +68,15 @@ DOMAIN_CONFIGS: dict[str, DomainConfig] = {
             "horarios": ".horarios, [class*='schedule'], table",
         },
         fallback_urls=["https://valledellili.org/nuestra-institucion/nuestras-sedes/"],
+        trim_before_first_h1=True,
+        markdown_cutoff_headings=[
+            "## Noticias y novedades",
+            "## Conoce otras sedes",
+            "## ¿En qué tema de salud te podemos orientar hoy?",
+            "### Autorización datos personales",
+            "### Otros servicios y especialidades",
+            "### Contenidos relacionados",
+        ],
     ),
     "institucional": DomainConfig(
         name="institucional",
@@ -68,6 +91,11 @@ DOMAIN_CONFIGS: dict[str, DomainConfig] = {
         extra_metadata_selectors={},
         fallback_urls=[
             "https://valledellili.org/nuestra-institucion/",
+        ],
+        trim_before_first_h1=True,
+        markdown_cutoff_headings=[
+            "### Otros servicios y especialidades",
+            "### Contenidos relacionados",
         ],
     ),
 }

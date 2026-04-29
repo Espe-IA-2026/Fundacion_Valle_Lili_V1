@@ -39,3 +39,4 @@ geckodriver
 
 # Carpeta data
 data/*
+.claude/*

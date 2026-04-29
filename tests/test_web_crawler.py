@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import httpx
+import requests
 import pytest
 
 from semantic_layer_fvl.config.settings import Settings
+from semantic_layer_fvl.domains import DOMAIN_CONFIGS
 from semantic_layer_fvl.extractors import (
     CrawlBlockedError,
     HttpClient,
@@ -31,7 +33,9 @@ def test_web_crawler_returns_raw_page_with_title_and_text() -> None:
         )
 
     def robots_fetcher(robots_url: str) -> RobotsFetchResult:
-        return RobotsFetchResult(url=robots_url, status_code=200, text="User-agent: *\nAllow: /\n")
+        return RobotsFetchResult(
+            url=robots_url, status_code=200, text="User-agent: *\nAllow: /\n"
+        )
 
     settings = Settings(requests_per_second=10, respect_robots_txt=True)
     client = HttpClient(settings, transport=httpx.MockTransport(handler))
@@ -62,7 +66,9 @@ def test_web_crawler_decodes_utf8_content_without_declared_charset() -> None:
         )
 
     def robots_fetcher(robots_url: str) -> RobotsFetchResult:
-        return RobotsFetchResult(url=robots_url, status_code=200, text="User-agent: *\nAllow: /\n")
+        return RobotsFetchResult(
+            url=robots_url, status_code=200, text="User-agent: *\nAllow: /\n"
+        )
 
     settings = Settings(requests_per_second=10, respect_robots_txt=True)
     client = HttpClient(settings, transport=httpx.MockTransport(handler))
@@ -99,7 +105,9 @@ def test_web_crawler_uses_meta_description_as_fallback_for_sparse_pages() -> Non
         )
 
     def robots_fetcher(robots_url: str) -> RobotsFetchResult:
-        return RobotsFetchResult(url=robots_url, status_code=200, text="User-agent: *\nAllow: /\n")
+        return RobotsFetchResult(
+            url=robots_url, status_code=200, text="User-agent: *\nAllow: /\n"
+        )
 
     settings = Settings(requests_per_second=10, respect_robots_txt=True)
     client = HttpClient(settings, transport=httpx.MockTransport(handler))
@@ -142,7 +150,9 @@ def test_web_crawler_prefers_og_title_and_main_content() -> None:
         )
 
     def robots_fetcher(robots_url: str) -> RobotsFetchResult:
-        return RobotsFetchResult(url=robots_url, status_code=200, text="User-agent: *\nAllow: /\n")
+        return RobotsFetchResult(
+            url=robots_url, status_code=200, text="User-agent: *\nAllow: /\n"
+        )
 
     settings = Settings(requests_per_second=10, respect_robots_txt=True)
     client = HttpClient(settings, transport=httpx.MockTransport(handler))
@@ -160,13 +170,114 @@ def test_web_crawler_prefers_og_title_and_main_content() -> None:
     assert "Menu principal" not in (page.text_content or "")
 
 
-def test_normalize_title_takes_first_pipe_segment() -> None:
-    assert normalize_title("Especialidades de la A a la Z | Fundacion") == "Especialidades de la A a la Z"
-    assert normalize_title("Directorio Medico | FVL | FVL duplicado") == "Directorio Medico"
+def test_web_crawler_cleans_sede_domain_markdown(monkeypatch) -> None:
+    html = """
+    <html>
+      <head><title>Sede Alfaguara</title></head>
+      <body>
+        <main>
+          <div>
+            ### Encuentra lo que necesitas en la Fundación Valle del Lili
+            [Preparación para exámenes y procedimientos](/preparacion-para-examenes-y-procedimientos/)
+            [Hospital Padrino](/impacto-social/programa-hospital-padrino/)
+            [Biblioteca](/educacion/biblioteca/)
+            [FVL al día](/fvl-al-dia/)
+            [Buscar especialidad](/servicios/)
+            [Agenda tu cita](/solicitar-cita-medica/)
+            [Especialistas](/directorio-medico/)
+          </div>
+
+          # Sede Alfaguara – Fundación Valle del Lili
+          [Agenda una cita](/solicitar-cita-medica/)
+          Scroll
+
+          ## Excelencia médica más cerca de ti en Jamundí
+          Texto base de la sede.
+
+          ## Servicios destacados
+          [Ver todos los servicios y especialidades](/servicios/?por_servicio=&by_tag=&sede=sede-alfaguara)
+          ### Alergología
+          Descripción de la especialidad.
+          [Ver especialidad](https://valledellili.org/servicios/alergologia/)
+
+          ## Horarios de atención
+          Lunes a viernes: 7:00 a.m. – 6:00 p.m.
+
+          ## Noticias y novedades
+          Ruido que no debe quedar.
+
+          ### Autorización datos personales
+          Privacidad que no debe quedar.
+        </main>
+      </body>
+    </html>
+    """
+
+    class ResponseStub:
+        def __init__(self, url: str) -> None:
+            self.status_code = 200
+            self.text = html
+            self.content = html.encode("utf-8")
+            self.url = url
+            self.headers = {"content-type": "text/html; charset=utf-8"}
+
+        def raise_for_status(self) -> None:
+            return None
+
+    def handler(url: str, headers: dict[str, str], timeout: int) -> ResponseStub:
+        return ResponseStub(url)
+
+    def robots_fetcher(robots_url: str) -> RobotsFetchResult:
+        return RobotsFetchResult(
+            url=robots_url, status_code=200, text="User-agent: *\nAllow: /\n"
+        )
+
+    monkeypatch.setattr(requests, "get", handler)
+
+    settings = Settings(requests_per_second=10, respect_robots_txt=True)
+    client = HttpClient(
+        settings,
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, request=request)
+        ),
+    )
+    crawler = WebCrawler(
+        client,
+        settings=settings,
+        robots_policy=RobotsPolicy(settings.user_agent, fetcher=robots_fetcher),
+    )
+
+    page = crawler.fetch_domain_page(
+        "https://valledellili.org/sedes/sede-alfaguara/",
+        DOMAIN_CONFIGS["sedes"],
+    )
+    client.close()
+
+    markdown = page.text_content or ""
+
+    assert "Encuentra lo que necesitas" not in markdown
+    assert "Servicios para ti" not in markdown
+    assert "Agenda una cita" not in markdown
+    assert "Scroll" not in markdown
+    assert "Ver todos los servicios y especialidades" not in markdown
+    assert "Ver especialidad" not in markdown
+    assert "Noticias y novedades" not in markdown
+    assert "Autorización datos personales" not in markdown
+    assert "# Sede Alfaguara – Fundación Valle del Lili" in markdown
+    assert "## Excelencia médica más cerca de ti en Jamundí" in markdown
+    assert "### Alergología" in markdown
+    assert "\n\n\n" not in markdown
+    assert (
+        normalize_title("Directorio Medico | FVL | FVL duplicado")
+        == "Directorio Medico"
+    )
 
 
 def test_normalize_title_preserves_title_without_pipe() -> None:
-    assert normalize_title("Inicio - Fundacion Valle del Lili") == "Inicio - Fundacion Valle del Lili"
+    assert (
+        normalize_title("Inicio - Fundacion Valle del Lili")
+        == "Inicio - Fundacion Valle del Lili"
+    )
 
 
 def test_normalize_title_inserts_space_between_concatenated_words() -> None:
