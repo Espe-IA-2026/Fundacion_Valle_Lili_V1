@@ -1,8 +1,8 @@
-# Chatbot FVL - Modulo 1
+# Asistente Virtual FVL - Modulo 1
 
-Pipeline de extraccion y estructuracion de conocimiento para la Fundacion Valle del Lili + aplicacion de chat en Streamlit con orquestacion LangChain.
+Pipeline de extraccion y estructuracion de conocimiento para la Fundacion Valle del Lili + dashboard Streamlit con tres funcionalidades de LLM orquestadas con LangChain.
 
-Premisa del proyecto en esta fase: **NO es un RAG**. El asistente responde usando contexto consolidado en prompt de sistema.
+Premisa del proyecto en esta fase: **NO es un RAG**. Las tres tareas responden usando contexto consolidado inyectado en el prompt de sistema.
 
 ---
 
@@ -11,12 +11,15 @@ Premisa del proyecto en esta fase: **NO es un RAG**. El asistente responde usand
 Este repositorio tiene dos piezas integradas:
 
 1. `semantic_layer_fvl`: capa semantica que extrae informacion publica y genera una base de conocimiento en Markdown.
-2. `app`: motor y frontend de chat que consumen esa base de conocimiento con estrategia de context stuffing (sin retrieval vectorial).
+2. `app`: motor y frontend que consumen esa base de conocimiento con estrategia de context stuffing (sin retrieval vectorial) y exponen tres funcionalidades de LLM.
 
 Resultado esperado:
 
 - Salida limpia en `data/knowledge/` por dominios institucionales.
-- Chatbot que responde usando solo contexto institucional consolidado.
+- Dashboard con tres herramientas que responden usando solo contexto institucional consolidado:
+  - **Q&A conversacional**: chatbot con historial de turnos.
+  - **Resumen**: sintesis estructurada en Markdown de cualquier tema institucional.
+  - **FAQ**: entre 5 y 8 preguntas frecuentes con respuestas fundamentadas en los documentos.
 
 ---
 
@@ -48,9 +51,12 @@ app.engine -> contexto consolidado + compactacion
             |
             v
 LangChain + OpenAI (NO-RAG)
+   ┌────────┼────────────┐
+   v        v            v
+Q&A chain  Summary chain FAQ chain
             |
             v
-Streamlit chat UI
+Streamlit dashboard (3 pestañas)
 ```
 
 Capas principales:
@@ -101,18 +107,31 @@ Secuencia:
 
 ---
 
-## 5. Estrategia del Chatbot (NO-RAG)
+## 5. Estrategia del Asistente (NO-RAG)
 
-El chatbot **no usa vectorstore ni retrieval semantico** en esta fase.
+Las tres funcionalidades **no usan vectorstore ni retrieval semantico** en esta fase.
 
-Se hace:
+Flujo compartido:
 
 1. Carga recursiva de `.md` desde `KNOWLEDGE_DIR`.
-2. Consolidacion de todos los documentos en un solo contexto.
-3. Inyeccion de ese contexto en el prompt de sistema.
-4. Pregunta del usuario + historial acotado.
+2. Consolidacion de todos los documentos en un solo contexto compactado.
+3. Inyeccion de ese contexto en el prompt de sistema de cada cadena.
 
-Archivo clave: `src/app/engine.py`.
+Las tres cadenas LangChain disponibles en `src/app/engine.py`:
+
+| Funcion | Cadena | Descripcion |
+|---|---|---|
+| `build_chain()` | Q&A | Chat multi-turno con `MessagesPlaceholder`. Temperatura 0.1. |
+| `build_summary_chain()` | Resumen | Genera sintesis estructurada en Markdown por tema. Temperatura 0.2. |
+| `build_faq_chain()` | FAQ | Genera 5-8 preguntas frecuentes con respuestas. Temperatura 0.2. |
+
+Funciones de invocacion:
+
+- `get_response(chain, context, question, history)` — Q&A con historial acotado.
+- `get_summary(chain, context, topic)` — Resumen de un tema.
+- `get_faq(chain, context, topic)` — FAQ sobre un tema.
+
+La carga de recursos usa `@st.cache_resource` para que el conocimiento y las tres cadenas se inicialicen una sola vez por sesion del servidor.
 
 ---
 
@@ -134,8 +153,10 @@ Para reducir tokens sin romper la premisa NO-RAG:
 - limite por caracteres totales
 - limite por mensaje
 
-4. **Presupuesto de salida**
-- `RESPONSE_MAX_TOKENS` configurable
+4. **Presupuestos de salida por tarea**
+- `RESPONSE_MAX_TOKENS` para Q&A (default 500)
+- `SUMMARY_MAX_TOKENS` para Resumen (default 900)
+- `FAQ_MAX_TOKENS` para FAQ (default 1200)
 
 5. **Trazabilidad de contexto**
 - `data/debug_context_raw.txt` (consolidado original)
@@ -143,7 +164,9 @@ Para reducir tokens sin romper la premisa NO-RAG:
 
 Variables de control (`.env`):
 
-- `RESPONSE_MAX_TOKENS`
+- `RESPONSE_MAX_TOKENS` — tokens maximos en respuesta Q&A (default 500)
+- `SUMMARY_MAX_TOKENS` — tokens maximos en respuesta de Resumen (default 900)
+- `FAQ_MAX_TOKENS` — tokens maximos en respuesta de FAQ (default 1200)
 - `HISTORY_MAX_TURNS`
 - `HISTORY_MAX_CHARS`
 - `HISTORY_ITEM_MAX_CHARS`
@@ -252,11 +275,17 @@ uv run semantic-layer-fvl youtube-feed <feed_url> --write
 uv run semantic-layer-fvl news-feed <feed_url> --write
 ```
 
-### 10.3 Frontend Streamlit
+### 10.3 Dashboard Streamlit
 
 ```powershell
 uv run streamlit run src/app/main.py
 ```
+
+La aplicacion abre en `http://localhost:8501` con tres pestanas:
+
+- **💬 Q&A — Preguntas y Respuestas**: chat conversacional con boton para limpiar historial.
+- **📋 Resumen**: ingresa un tema y descarga la sintesis en `.md`.
+- **❓ FAQ**: ingresa un tema y descarga las preguntas frecuentes en `.md`.
 
 ### 10.4 Atajos Makefile
 
@@ -297,9 +326,11 @@ Valores minimos recomendados:
 
 ```dotenv
 OPENAI_API_KEY=<tu_api_key>
-OPENAI_MODEL=gpt-5.4-mini
+OPENAI_MODEL=gpt-4o-mini
 KNOWLEDGE_DIR=data/knowledge
 RESPONSE_MAX_TOKENS=500
+SUMMARY_MAX_TOKENS=900
+FAQ_MAX_TOKENS=1200
 HISTORY_MAX_TURNS=6
 HISTORY_MAX_CHARS=3500
 HISTORY_ITEM_MAX_CHARS=700
@@ -371,8 +402,8 @@ La suite es offline y cubre, entre otros:
 - Usa `uv run semantic-layer-fvl ...` dentro de la raiz del repo.
 
 2. La app responde lento o caro en tokens
-- Baja `RESPONSE_MAX_TOKENS`.
-- Ajusta `HISTORY_MAX_*`.
+- Baja `RESPONSE_MAX_TOKENS` (Q&A), `SUMMARY_MAX_TOKENS` (Resumen) o `FAQ_MAX_TOKENS` (FAQ).
+- Ajusta `HISTORY_MAX_*` para reducir tokens del historial en Q&A.
 - Mantiene `KNOWLEDGE_DIR=data/knowledge`.
 
 3. Error por API key
@@ -395,6 +426,6 @@ La suite es offline y cubre, entre otros:
 
 ## 15. Estado del Modulo
 
-Estado actual: funcional para construccion de base semantica + app de chat NO-RAG con optimizaciones de costo.
+Estado actual: funcional para construccion de base semantica + dashboard NO-RAG con tres funcionalidades LLM (Q&A, Resumen, FAQ) y optimizaciones de costo de inferencia.
 
-Siguiente paso natural (si el curso lo permite): evolucionar a recuperacion selectiva por documentos/chunks en una fase posterior.
+Siguiente paso natural (si el curso lo permite): evolucionar a recuperacion selectiva por documentos/chunks (RAG) — el modulo `TextChunker` en `processors/chunker.py` ya esta implementado y reservado para esa fase.
