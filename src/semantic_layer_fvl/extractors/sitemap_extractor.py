@@ -27,16 +27,20 @@ def fetch_domain_urls(base_url: str, config: DomainConfig) -> list[str]:
     """Return filtered URLs from the domain sitemap.
 
     Tries each path in config.sitemap_paths with browser-like headers.
-    Falls back to config.fallback_urls if all sitemaps fail.
+    Falls back to config.fallback_urls if all sitemaps fail or all URLs
+    are filtered out.
     """
     base = base_url.rstrip("/")
     for path in config.sitemap_paths:
         urls = _parse_sitemap(f"{base}/{path}")
-        if urls:
-            filtered = _apply_filters(urls, config)
-            logger.info("[sitemap] %s → %d URLs after filtering", path, len(filtered))
+        if not urls:
+            logger.debug("[sitemap] %s/%s returned no URLs", base, path)
+            continue
+        filtered = _apply_filters(urls, config)
+        logger.info("[sitemap] %s → %d URLs after filtering", path, len(filtered))
+        if filtered:
             return filtered
-        logger.debug("[sitemap] %s/%s returned no URLs", base, path)
+        logger.debug("[sitemap] %s → all %d URLs excluded by filters", path, len(urls))
 
     logger.warning(
         "[sitemap] All sitemap paths failed for domain '%s' — using %d fallback URL(s)",
