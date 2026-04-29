@@ -1,5 +1,5 @@
 """
-Diagnóstico de selector HTML para páginas de directorio-medico.
+Diagnóstico de selector HTML para páginas del sitio valledellili.org.
 
 Ejecutar desde la raíz del proyecto:
     python diagnostico_selector.py
@@ -33,27 +33,34 @@ NOISE_SELECTOR = (
 )
 
 CANDIDATE_SELECTORS = [
-    "div.content-post",
-    "article",
     "main",
+    "article",
     "[role='main']",
-    ".elementor-widget-theme-post-content",
-    ".entry-content",
-    ".post-content",
-    ".site-main",
     "#content",
     "#main",
+    "#primary",
+    ".site-content",
+    ".site-main",
+    ".entry-content",
+    ".post-content",
     ".page-content",
-    ".single-content",
-    ".doctor-profile",
-    ".team-member",
-    ".elementor-section",
+    ".content-block",
+    ".content-post",
+    ".ma-content",
+    ".ml-main-container",
+    "section.personal-sfaff-lite",
+    ".elementor-widget-theme-post-content",
+    ".wp-block-group",
+    "div.content-block",
 ]
 
-TEST_URLS = [
-    "https://valledellili.org/directorio-medico/adolfo-leon-de-la-hoz-alban/",
-    "https://valledellili.org/directorio-medico/",
-]
+TEST_URLS = {
+    "especialistas_perfil": "https://valledellili.org/directorio-medico/adolfo-leon-de-la-hoz-alban/",
+    "especialistas_listado": "https://valledellili.org/directorio-medico/",
+    "institucional_principal": "https://valledellili.org/nuestra-institucion/",
+    "institucional_quienes": "https://valledellili.org/nuestra-institucion/quienes-somos/",
+    "institucional_historia": "https://valledellili.org/nuestra-institucion/historia/",
+}
 
 
 def _clean(soup: BeautifulSoup) -> BeautifulSoup:
@@ -62,14 +69,14 @@ def _clean(soup: BeautifulSoup) -> BeautifulSoup:
     return soup
 
 
-def _preview(text: str, chars: int = 200) -> str:
+def _preview(text: str, chars: int = 150) -> str:
     collapsed = re.sub(r"\s+", " ", text).strip()
     return collapsed[:chars] + ("…" if len(collapsed) > chars else "")
 
 
-def diagnose(url: str) -> None:
+def diagnose(label: str, url: str) -> None:
     print(f"\n{'=' * 70}")
-    print(f"URL: {url}")
+    print(f"[{label}]  {url}")
     print("=" * 70)
 
     try:
@@ -79,21 +86,21 @@ def diagnose(url: str) -> None:
         print(f"  ERROR al descargar: {exc}")
         return
 
-    soup = BeautifulSoup(r.content, "html.parser")
+    soup_raw = BeautifulSoup(r.content, "html.parser")
 
-    # ── 1. IDs disponibles ──────────────────────────────────────────────────
-    ids = [(t.name, t["id"]) for t in soup.find_all(id=True)]
-    print(f"\n[IDs en la página ({len(ids)} total)]")
-    for name, id_ in ids[:30]:
-        print(f"  <{name} id='{id_}'>")
+    # ── Título real de la página ────────────────────────────────────────────
+    h1 = soup_raw.find("h1")
+    title_tag = soup_raw.find("title")
+    print(f"\n  <h1>  : {h1.get_text(strip=True)[:100] if h1 else '(none)'}")
+    print(f"  <title>: {title_tag.get_text(strip=True)[:100] if title_tag else '(none)'}")
 
-    # ── 2. Clases únicas de contenedores ────────────────────────────────────
+    # ── Clases únicas de contenedores relevantes ────────────────────────────
     kw = ["content", "main", "post", "article", "single", "doctor", "medico",
           "profile", "especialista", "entry", "page", "container", "wrapper",
-          "team", "staff", "bio", "physician", "elementor"]
+          "team", "staff", "bio", "elementor", "ml-", "ma-"]
     seen: set[str] = set()
     matches: list[str] = []
-    for tag in soup.find_all(["div", "article", "section", "main"], class_=True):
+    for tag in soup_raw.find_all(["div", "article", "section", "main"], class_=True):
         cls = " ".join(tag.get("class", []))
         key = cls[:120]
         if key in seen:
@@ -102,27 +109,35 @@ def diagnose(url: str) -> None:
         if any(k in cls.lower() for k in kw):
             matches.append(f"  <{tag.name} class='{cls[:100]}'>")
 
-    print(f"\n[Contenedores con clases relevantes ({len(matches)} únicos)]")
-    for m in matches[:40]:
+    print(f"\n  Contenedores candidatos ({len(matches)} únicos):")
+    for m in matches[:30]:
         print(m)
 
-    # ── 3. Prueba de selectores candidatos ──────────────────────────────────
-    print("\n[Prueba de selectores — texto capturado tras limpieza]")
+    # ── Prueba de selectores ────────────────────────────────────────────────
+    print("\n  Selectores → palabras capturadas (tras limpieza):")
     soup_clean = _clean(BeautifulSoup(r.content, "html.parser"))
 
+    best = ("—", 0, "")
     for sel in CANDIDATE_SELECTORS:
         node = soup_clean.select_one(sel)
         if node is None:
-            print(f"  {sel:<45} → NO ENCONTRADO")
+            print(f"    {sel:<50} → NO ENCONTRADO")
         else:
             txt = node.get_text(separator=" ", strip=True)
             words = len(re.findall(r"\w{3,}", txt))
-            print(f"  {sel:<45} → {words:>4} palabras | {_preview(txt, 120)!r}")
+            preview = _preview(txt)
+            print(f"    {sel:<50} → {words:>4} palabras | {preview!r}")
+            if words > best[1]:
+                best = (sel, words, preview)
+
+    print(f"\n  *** MEJOR SELECTOR: '{best[0]}' con {best[1]} palabras ***")
 
 
 if __name__ == "__main__":
-    urls = sys.argv[1:] if len(sys.argv) > 1 else TEST_URLS
-    for u in urls:
-        diagnose(u)
-    print("\nDiagnóstico completado.")
-    print("Comparte este output para identificar el selector correcto.")
+    if len(sys.argv) > 1:
+        for u in sys.argv[1:]:
+            diagnose("custom", u)
+    else:
+        for label, url in TEST_URLS.items():
+            diagnose(label, url)
+    print("\n\nDiagnóstico completado.")
