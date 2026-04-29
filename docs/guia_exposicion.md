@@ -1,4 +1,4 @@
-# Guía de Exposición — Chatbot Fundación Valle del Lili
+# Guía de Exposición — Asistente Virtual Fundación Valle del Lili
 **Duración total:** 15 minutos · **Equipo:** 4 personas
 
 ---
@@ -63,7 +63,7 @@
 
 ### Guion de presentación
 
-> "Una vez que tenemos los documentos, necesitamos un motor inteligente que los use para responder preguntas. Aquí es donde entra LangChain como orquestador de la cadena de inferencia."
+> "Una vez que tenemos los documentos, necesitamos un motor inteligente que los use para responder preguntas, generar resúmenes y producir preguntas frecuentes. Aquí es donde entra LangChain como orquestador de las tres cadenas de inferencia."
 
 ### Puntos clave a cubrir
 
@@ -85,24 +85,29 @@
    - Reemplaza texto repetido por abreviaturas: `"Fundación Valle del Lili"` → `FVL`, `"## Especialistas que pueden atenderte"` → `## ESP`.
    - Activa la compresión por léxico de líneas (`_compress_repeated_lines`) para tokens adicionales: líneas que aparecen ≥5 veces y tienen ≥24 caracteres se reemplazan por tokens `L001`, `L002`, etc.
 
-3. **`build_chain()`** — La cadena LangChain:
+3. **Tres cadenas LangChain independientes** — misma estructura, distinto propósito:
    ```
    ChatPromptTemplate | ChatOpenAI | StrOutputParser
    ```
-   - El `ChatPromptTemplate` tiene tres partes:
-     - **System**: contiene el `SYSTEM_TEMPLATE` con el contexto completo y las 7 instrucciones estrictas del asistente.
-     - **MessagesPlaceholder("history_messages")**: inyecta el historial de conversación.
-     - **Human**: recibe la pregunta actual del usuario.
-   - El `ChatOpenAI` usa `gpt-4o-mini` con temperatura 0.1 (respuestas consistentes y poco creativas).
-   - El `StrOutputParser` convierte la respuesta del modelo en una cadena simple.
 
-4. **`get_response(chain, context, question, history)`:**
-   - Invoca la cadena con el contexto, el historial procesado y la pregunta.
-   - El historial se limita mediante `_history_to_messages()`: máximo 6 turnos, máximo 3500 caracteres acumulados, máximo 700 caracteres por mensaje.
+   | Función | Template | Historial | Temperatura | Tokens máx. |
+   |---|---|---|---|---|
+   | `build_chain()` | `SYSTEM_TEMPLATE` | Sí (`MessagesPlaceholder`) | 0.1 | 500 |
+   | `build_summary_chain()` | `SUMMARY_SYSTEM_TEMPLATE` | No (single-turn) | 0.2 | 900 |
+   | `build_faq_chain()` | `FAQ_SYSTEM_TEMPLATE` | No (single-turn) | 0.2 | 1 200 |
+
+   - Q&A usa temperatura 0.1 (máxima consistencia) e historial multi-turno.
+   - Resumen y FAQ usan temperatura 0.2 (algo de fluidez) y son single-turn: cada invocación es independiente.
+
+4. **Funciones de invocación:**
+   - `get_response(chain, context, question, history)` — inyecta contexto + historial acotado + pregunta.
+   - `get_summary(chain, context, topic)` — inyecta contexto + tema; devuelve Markdown estructurado.
+   - `get_faq(chain, context, topic)` — inyecta contexto + tema; devuelve 5-8 pares pregunta/respuesta.
+   - El historial de Q&A se limita con `_history_to_messages()`: máximo 6 turnos, 3 500 caracteres, 700 por mensaje.
 
 ### Qué mostrar / señalar
-- El código de `build_chain()` en `engine.py` (líneas ~152-167).
-- El `SYSTEM_TEMPLATE` con las instrucciones estrictas.
+- Las tres funciones `build_*` en `engine.py` para notar la simetría de diseño.
+- Los tres templates con sus instrucciones estrictas (grounding, fallback, formato).
 - Los archivos de debug: `data/debug_context.txt` (compactado) vs `data/debug_context_raw.txt` (crudo) para mostrar el ahorro de tokens.
 
 ---
@@ -129,38 +134,38 @@
    - Layout centrado.
 
 2. **Carga de recursos con caché** (`@st.cache_resource`):
-   - `load_resources()` llama a `load_knowledge_base()` y `build_chain()` una sola vez.
-   - `@st.cache_resource` garantiza que aunque el usuario refresque la página, el conocimiento y la cadena no se recargan — esto es crítico por el costo computacional de leer cientos de archivos.
+   - `load_resources()` llama a `load_knowledge_base()` y construye las **tres cadenas** (`build_chain`, `build_summary_chain`, `build_faq_chain`) una sola vez.
+   - Devuelve una tupla de cuatro elementos: `(qa_chain, summary_chain, faq_chain, context)`.
+   - `@st.cache_resource` garantiza que aunque el usuario refresque la página, el conocimiento y las cadenas no se recargan.
 
-3. **Bucle de conversación:**
-   - El historial se almacena en `st.session_state.messages` (lista de dicts `{role, content}`).
-   - Al cargar la página, se renderizan todos los mensajes previos con `st.chat_message`.
-   - Cuando el usuario escribe en `st.chat_input`, el mensaje se agrega al historial y se muestra inmediatamente.
-   - Se llama a `get_response(chain, context, user_input, history_for_prompt)` dentro de un `st.spinner` para mostrar "Consultando documentos institucionales…" mientras el modelo responde.
-   - La respuesta se agrega al historial y se muestra con `st.chat_message("assistant")`.
+3. **Tres pestañas, tres funciones de renderizado:**
+   - `_render_qa_tab(qa_chain, context)` — chat multi-turno con `st.chat_input` y botón "Limpiar conversación".
+   - `_render_summary_tab(summary_chain, context)` — formulario con `st.form`, resultado en `st.session_state["summary_result"]`, botón de descarga `.md`.
+   - `_render_faq_tab(faq_chain, context)` — formulario con `st.form`, resultado en `st.session_state["faq_result"]`, botón de descarga `.md`.
+   - Los resultados de Resumen y FAQ persisten en `st.session_state` para no perderse en reruns de Streamlit.
 
-**Comunicación interfaz → motor:**
+**Comunicación interfaz → motor (flujo unificado para las tres tareas):**
 
 ```
-Usuario escribe pregunta
+Usuario interactúa en una pestaña
         ↓
-main.py: get_response(chain, context, pregunta, historial)
+main.py: llama a get_response / get_summary / get_faq
         ↓
-engine.py: chain.invoke({context, history_messages, question})
+engine.py: chain.invoke({context, [historial/topic]})
         ↓
-LangChain: construye el prompt completo y lo envía a OpenAI API
+LangChain: construye el prompt y lo envía a OpenAI API
         ↓
 OpenAI devuelve la respuesta
         ↓
 StrOutputParser convierte a string
         ↓
-main.py: muestra respuesta en st.chat_message("assistant")
+main.py: muestra resultado (chat / markdown / descarga .md)
 ```
 
 ### Qué mostrar / señalar
-- La interfaz en vivo en el navegador con una pregunta de ejemplo.
-- El spinner de "Consultando documentos institucionales…".
-- El código de `load_resources()` mostrando el decorador `@st.cache_resource`.
+- La interfaz en vivo con las tres pestañas visibles.
+- Demostrar Q&A con una pregunta, luego Resumen con un tema (p.ej. "cardiología") y FAQ con otro.
+- El código de `load_resources()` mostrando el decorador `@st.cache_resource` y la tupla de cuatro elementos.
 
 ---
 
@@ -173,7 +178,7 @@ main.py: muestra respuesta en st.chat_message("assistant")
 
 ### Puntos clave a cubrir
 
-**El flujo completo de integración:**
+**El flujo completo de integración (compartido por las tres tareas):**
 
 ```
 Archivos .md en data/knowledge/
@@ -186,27 +191,37 @@ _compact_context(): abreviaturas + compresión de líneas
          ↓
 Contexto compacto → variable "context"
          ↓
-SYSTEM_TEMPLATE.format(context=context) → prompt del sistema
-         ↓
-ChatPromptTemplate.from_messages([system, history, human])
-         ↓
-ChatOpenAI (gpt-4o-mini) recibe el prompt completo
-         ↓
-Respuesta grounded en los documentos institucionales
+         ┌────────────────────┬─────────────────────┐
+         ▼                    ▼                     ▼
+ SYSTEM_TEMPLATE        SUMMARY_SYSTEM_      FAQ_SYSTEM_
+ (Q&A multi-turno)      TEMPLATE (Resumen)   TEMPLATE (FAQ)
+         └────────────────────┴─────────────────────┘
+                              ↓
+            ChatOpenAI (gpt-4o-mini) recibe el prompt completo
+                              ↓
+              Respuesta grounded en los documentos institucionales
 ```
 
 **Por qué el frontmatter se elimina antes de inyectar:**
 - El frontmatter YAML contiene metadatos de extracción (fecha, URL, estado) que son irrelevantes para el modelo y consumen tokens innecesarios.
 - El contenido útil para el modelo es el cuerpo Markdown: encabezados, párrafos, listas de especialistas, horarios, etc.
 
-**Cómo el SYSTEM_TEMPLATE amarra el conocimiento al agente:**
+**Cómo los tres templates amarran el conocimiento al agente:**
+
+Los tres comparten el mismo principio de grounding:
 ```
 INSTRUCCIONES ESTRICTAS:
-1. Responde ÚNICAMENTE con información contenida en la BASE DE CONOCIMIENTO.
-2. Si la respuesta no está en el contexto, responde exactamente: 
+1. Responde/genera ÚNICAMENTE con información de la BASE DE CONOCIMIENTO.
+2. Si el tema no está en el contexto, responde exactamente:
    "No encontré esa información..."
 3. NUNCA inventes datos como fechas, nombres, precios o teléfonos.
 ```
+
+Cada template añade además instrucciones de **formato específico por tarea**:
+- Q&A: respuesta conversacional con referencia `DOC:<slug>`.
+- Resumen: estructura Markdown con secciones (`## Descripción`, `## Servicios`, `## Fuentes consultadas`).
+- FAQ: entre 5 y 8 pares `**¿Pregunta?** / Respuesta` numerados.
+
 - Estas instrucciones hacen que el modelo actúe como un agente **grounded**: solo puede responder con lo que está en los documentos, no con su conocimiento preentrenado.
 
 **El rol de los marcadores de documento:**
@@ -226,8 +241,8 @@ INSTRUCCIONES ESTRICTAS:
 
 ### Qué mostrar / señalar
 - El archivo `data/debug_context.txt` para mostrar cómo queda el contexto comprimido.
-- El `SYSTEM_TEMPLATE` completo en `engine.py` (líneas ~18-44).
-- Una demostración en vivo: pregunta al chatbot algo que esté en los documentos y algo que NO esté, para mostrar el comportamiento grounded vs. la respuesta de "no encontré".
+- Los tres templates en `engine.py`: señalar la sección `INSTRUCCIONES ESTRICTAS` idéntica en los tres y la sección de formato diferente en cada uno.
+- Una demostración en vivo: pregunta al chatbot algo que esté en los documentos y algo que NO esté (pestaña Q&A), luego solicita un resumen de "cardiología" (pestaña Resumen) y un FAQ de "urgencias" (pestaña FAQ), para mostrar los tres modos de salida y el comportamiento grounded en cada uno.
 
 ---
 
@@ -235,7 +250,7 @@ INSTRUCCIONES ESTRICTAS:
 
 > **Cualquiera de los 4 expositores puede cerrar:**
 >
-> "En resumen: construimos un pipeline de extracción que convierte el sitio web de la FVL en una base de conocimiento Markdown, un motor LangChain que inyecta esa base directamente en el prompt del agente, y una interfaz Streamlit que conecta al usuario con ese motor de forma transparente. El resultado es un chatbot que solo responde con información institucional verificada, sin alucinaciones."
+> "En resumen: construimos un pipeline de extracción que convierte el sitio web de la FVL en una base de conocimiento Markdown, un motor LangChain con tres cadenas independientes que inyectan esa base en el prompt de cada tarea, y un dashboard Streamlit con tres pestañas que expone Q&A conversacional, generación de resúmenes y generación de preguntas frecuentes. El resultado es un asistente que responde únicamente con información institucional verificada, sin alucinaciones, en tres formatos distintos según la necesidad del usuario."
 
 ---
 
@@ -244,8 +259,10 @@ INSTRUCCIONES ESTRICTAS:
 | Pregunta posible | Respuesta sugerida |
 |---|---|
 | ¿Por qué no usaron RAG? | El corpus actual cabe en el contexto del modelo. RAG está preparado en `TextChunker` para la v2.0. |
-| ¿Qué pasa si la información del sitio cambia? | Se re-ejecuta el pipeline de scraping para regenerar los `.md`. El chatbot siempre lee desde disco al iniciar. |
+| ¿Qué pasa si la información del sitio cambia? | Se re-ejecuta el pipeline de scraping para regenerar los `.md`. El asistente siempre lee desde disco al iniciar. |
 | ¿Qué modelo usan? | `gpt-4o-mini` por defecto, configurable con la variable de entorno `OPENAI_MODEL`. |
-| ¿Cómo evitan alucinaciones? | Las instrucciones estrictas del `SYSTEM_TEMPLATE` prohíben al modelo inventar datos. Temperatura 0.1 para reducir creatividad. |
+| ¿Cómo evitan alucinaciones? | Los tres templates tienen instrucciones estrictas que prohíben inventar datos. Q&A usa temperatura 0.1; Resumen y FAQ usan 0.2 para mayor fluidez sin creatividad excesiva. |
 | ¿Cuántos documentos tiene la base? | Depende del crawl. El dominio `servicios` genera ~200 documentos, `especialistas` ~300. |
 | ¿Cómo se actualiza la base? | Ejecutando `semantic-layer-fvl crawl-domain <dominio> --write` y reiniciando el servidor Streamlit. |
+| ¿Por qué tres cadenas y no una? | Cada tarea tiene instrucciones de formato diferentes (chat, Markdown estructurado, pares FAQ), temperatura distinta y presupuesto de tokens propio. Separar las cadenas hace el código más claro y cada prompt más preciso. |
+| ¿Se puede descargar la salida? | Sí. Las pestañas Resumen y FAQ incluyen un botón "Descargar (.md)" que guarda el resultado como archivo Markdown. |
