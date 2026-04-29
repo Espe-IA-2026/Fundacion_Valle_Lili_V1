@@ -1,3 +1,5 @@
+"""Crawler web que extrae páginas públicas y las convierte al esquema ``RawPage``."""
+
 from __future__ import annotations
 
 import logging
@@ -84,10 +86,12 @@ _NOISE_MARKDOWN_LINES = {
 
 
 class CrawlBlockedError(RuntimeError):
-    """Raised when a URL is blocked by robots.txt rules."""
+    """Se lanza cuando una URL está bloqueada por las reglas del ``robots.txt``."""
 
 
 class _MetadataParser(HTMLParser):
+    """Parser HTML liviano que extrae el título y la meta descripción de una página."""
+
     def __init__(self) -> None:
         super().__init__()
         self._inside_title = False
@@ -127,6 +131,8 @@ class _MetadataParser(HTMLParser):
 
 
 class _TextParser(HTMLParser):
+    """Parser HTML que extrae el texto visible de una página, priorizando el contenido principal."""
+
     def __init__(self) -> None:
         super().__init__()
         self.parts: list[str] = []
@@ -165,6 +171,14 @@ class _TextParser(HTMLParser):
 
 
 def extract_title(html: str) -> str | None:
+    """Extrae el título normalizado de una página HTML, priorizando ``og:title``.
+
+    Args:
+        html: Contenido HTML de la página.
+
+    Returns:
+        Título normalizado, o ``None`` si no se encontró.
+    """
     parser = _MetadataParser()
     parser.feed(html)
     if parser.og_title:
@@ -175,12 +189,31 @@ def extract_title(html: str) -> str | None:
 
 
 def extract_meta_description(html: str) -> str | None:
+    """Extrae la meta descripción (``description`` u ``og:description``) del HTML.
+
+    Args:
+        html: Contenido HTML de la página.
+
+    Returns:
+        Texto de la meta descripción, o ``None`` si no se encontró.
+    """
     parser = _MetadataParser()
     parser.feed(html)
     return parser.meta_description
 
 
 def decode_html(response) -> str:
+    """Decodifica el cuerpo de una respuesta HTTP como texto HTML.
+
+    Intenta las codificaciones en el siguiente orden: cabecera ``Content-Type``,
+    meta charset en el HTML, y finalmente UTF-8, CP1252 y Latin-1 como respaldo.
+
+    Args:
+        response: Objeto de respuesta ``httpx`` con atributos ``content`` y ``headers``.
+
+    Returns:
+        Contenido HTML decodificado como cadena de texto.
+    """
     content = response.content
     content_type = response.headers.get("content-type", "")
 
@@ -215,10 +248,17 @@ def decode_html(response) -> str:
 
 
 def extract_text_content(html: str) -> tuple[str, bool]:
-    """Return (text_content, has_primary_content).
+    """Extrae el contenido textual visible de una página HTML.
 
-    has_primary_content is True when content was found inside a <main>,
-    <article> or role="main" element; False when falling back to all page text.
+    Prioriza el texto dentro de elementos ``<main>``, ``<article>`` o con
+    ``role="main"``; si no los encuentra, utiliza todo el texto visible de la página.
+
+    Args:
+        html: Contenido HTML de la página.
+
+    Returns:
+        Tupla ``(texto, tiene_contenido_principal)`` donde el segundo elemento indica
+        si se encontró un bloque de contenido principal.
     """
     parser = _TextParser()
     parser.feed(html)
@@ -228,6 +268,8 @@ def extract_text_content(html: str) -> tuple[str, bool]:
 
 
 class _LinkParser(HTMLParser):
+    """Parser HTML que extrae y normaliza los enlaces internos de una página."""
+
     def __init__(self, base_url: str) -> None:
         super().__init__()
         self._base_url = base_url
@@ -264,10 +306,17 @@ class _LinkParser(HTMLParser):
 
 
 def extract_links(html: str, base_url: str) -> list[str]:
-    """Extract unique internal links from HTML, normalized and filtered.
+    """Extrae los enlaces internos únicos de un HTML, normalizados y filtrados.
 
-    Returns absolute URLs belonging to the same domain as base_url,
-    with fragments, query strings, and non-HTML resource extensions removed.
+    Devuelve URLs absolutas del mismo dominio que ``base_url``, sin fragmentos,
+    cadenas de consulta ni extensiones de recursos no HTML.
+
+    Args:
+        html: Contenido HTML de la página origen.
+        base_url: URL base para resolver rutas relativas y validar el dominio.
+
+    Returns:
+        Lista ordenada de URLs internas únicas.
     """
     parser = _LinkParser(base_url)
     parser.feed(html)
@@ -275,6 +324,7 @@ def extract_links(html: str, base_url: str) -> list[str]:
 
 
 def _normalize_markdown_lines(markdown_content: str) -> str:
+    """Elimina líneas de ruido y normaliza los espacios en blanco de un texto Markdown."""
     lines: list[str] = []
     for raw_line in markdown_content.splitlines():
         line = raw_line.rstrip()
@@ -294,6 +344,7 @@ def _normalize_markdown_lines(markdown_content: str) -> str:
 
 
 def _render_specialist_entries(section_body: str) -> list[str]:
+    """Convierte el cuerpo Markdown de una sección de especialistas en una lista de entradas limpias."""
     entries: list[str] = []
     link_pattern = re.compile(r"\[(.*?)\]\((https?://[^)]+)\)", re.DOTALL)
 
@@ -319,6 +370,7 @@ def _render_specialist_entries(section_body: str) -> list[str]:
 
 
 def _reformat_specialists_section(markdown_content: str, heading: str) -> str:
+    """Reformatea la sección de especialistas en el Markdown, reemplazando los enlaces por una lista limpia."""
     pattern = re.compile(
         rf"(?ms)^{re.escape(heading)}\s*(.*?)(?=^#{{1,6}}\s|\Z)",
     )
@@ -339,6 +391,7 @@ def _reformat_specialists_section(markdown_content: str, heading: str) -> str:
 
 
 def _cut_markdown_at_headings(markdown_content: str, headings: list[str]) -> str:
+    """Trunca el Markdown en el primer encabezado coincidente de la lista de corte."""
     if not headings:
         return markdown_content
 
@@ -358,6 +411,7 @@ def _cut_markdown_at_headings(markdown_content: str, headings: list[str]) -> str
 
 
 def _trim_before_first_h1(markdown_content: str) -> str:
+    """Elimina el contenido previo al primer encabezado H1 del Markdown."""
     match = re.search(r"(?m)^#\s+", markdown_content)
     if match is None:
         return markdown_content
@@ -365,6 +419,7 @@ def _trim_before_first_h1(markdown_content: str) -> str:
 
 
 def _clean_domain_markdown(markdown_content: str, config: DomainConfig) -> str:
+    """Aplica el conjunto completo de transformaciones de limpieza Markdown para un dominio dado."""
     cleaned = markdown_content.replace("\r\n", "\n").replace("\r", "\n")
     if config.trim_before_first_h1:
         cleaned = _trim_before_first_h1(cleaned)
@@ -378,6 +433,14 @@ def _clean_domain_markdown(markdown_content: str, config: DomainConfig) -> str:
 
 
 def normalize_title(value: str) -> str:
+    """Normaliza un título de página eliminando el sufijo de sitio y espacios redundantes.
+
+    Args:
+        value: Título crudo extraído del HTML.
+
+    Returns:
+        Título limpio sin sufijo tras ``|`` ni espacios innecesarios.
+    """
     normalized = re.sub(r"\s+", " ", value).strip()
     normalized = re.sub(r"([a-záéíóúñ])([A-ZÁÉÍÓÚÑ])", r"\1 \2", normalized)
 
@@ -390,7 +453,7 @@ def normalize_title(value: str) -> str:
 
 
 class WebCrawler:
-    """Minimal crawler for fetching a public page into the RawPage schema."""
+    """Crawler minimalista que obtiene páginas públicas y las convierte al esquema ``RawPage``."""
 
     def __init__(
         self,
@@ -400,6 +463,14 @@ class WebCrawler:
         robots_policy: RobotsPolicy | None = None,
         source_name: str = "Fundacion Valle del Lili",
     ) -> None:
+        """Inicializa el crawler con dependencias inyectables.
+
+        Args:
+            client: Cliente HTTP a utilizar. Si es ``None`` se crea uno con ``settings``.
+            settings: Configuración del proyecto. Si es ``None`` se obtiene la instancia global.
+            robots_policy: Política de ``robots.txt`` a usar. Si es ``None`` se crea una nueva.
+            source_name: Nombre legible de la fuente para los metadatos de extracción.
+        """
         self.settings = settings or get_settings()
         self.client = client or HttpClient(self.settings)
         self.robots_policy = robots_policy or RobotsPolicy(self.settings.user_agent)
@@ -418,12 +489,18 @@ class WebCrawler:
     def fetch_domain_page(
         self, url: str | AnyHttpUrl, config: DomainConfig
     ) -> RawPage | None:
-        """Fetch a page using domain-specific CSS selector and convert to Markdown.
+        """Obtiene una página usando el selector CSS del dominio y la convierte a Markdown.
 
-        Uses browser-like headers to avoid 403 blocks, BeautifulSoup to find
-        the domain container, and markdownify to produce structured Markdown.
-        Falls back to <body> if the configured container selector is not found.
-        Returns None only on network/HTTP errors.
+        Usa cabeceras de navegador para evitar bloqueos 403, BeautifulSoup para
+        localizar el contenedor del dominio y markdownify para generar Markdown
+        estructurado. Recurre a ``<body>`` si el selector configurado no se encuentra.
+
+        Args:
+            url: URL de la página a obtener.
+            config: Configuración del dominio con el selector y las reglas de limpieza.
+
+        Returns:
+            ``RawPage`` con el contenido procesado, o ``None`` en caso de error de red.
         """
         import requests as req_lib
 
@@ -518,6 +595,20 @@ class WebCrawler:
         )
 
     def fetch(self, url: str | AnyHttpUrl) -> RawPage:
+        """Obtiene una página pública y la convierte al esquema ``RawPage``.
+
+        Verifica el ``robots.txt`` antes de realizar la petición si está habilitado.
+
+        Args:
+            url: URL absoluta de la página a obtener.
+
+        Returns:
+            ``RawPage`` con el contenido y los metadatos de la extracción.
+
+        Raises:
+            CrawlBlockedError: Si la URL está bloqueada por el ``robots.txt``.
+            httpx.HTTPStatusError: Si el servidor responde con un código de error HTTP.
+        """
         if self.settings.respect_robots_txt:
             decision = self.robots_policy.evaluate(str(url))
             if not decision.allowed:

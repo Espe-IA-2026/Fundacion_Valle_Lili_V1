@@ -1,3 +1,5 @@
+"""Configuración centralizada del proyecto cargada desde variables de entorno."""
+
 from __future__ import annotations
 
 from functools import lru_cache
@@ -9,7 +11,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Central project settings loaded from environment variables."""
+    """Configuración central del proyecto cargada desde variables de entorno.
+
+    Los valores se leen del archivo ``.env`` y pueden sobreescribirse con
+    variables de entorno del sistema operativo (sin distinción de mayúsculas).
+    """
 
     project_name: str = "semantic-layer-fvl"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
@@ -38,20 +44,24 @@ class Settings(BaseSettings):
 
     @property
     def request_interval_seconds(self) -> float:
+        """Intervalo mínimo en segundos entre peticiones HTTP consecutivas."""
         return 1 / self.requests_per_second
 
     @property
     def project_root(self) -> Path:
+        """Ruta absoluta a la raíz del proyecto (tres niveles sobre este archivo)."""
         return Path(__file__).resolve().parents[3]
 
     @property
     def resolved_output_dir(self) -> Path:
+        """Ruta absoluta al directorio de salida, resuelta desde la raíz del proyecto."""
         if self.output_dir.is_absolute():
             return self.output_dir
         return (self.project_root / self.output_dir).resolve()
 
     @property
     def resolved_runs_dir(self) -> Path:
+        """Ruta absoluta al directorio de reportes de corridas."""
         if self.runs_dir.is_absolute():
             return self.runs_dir
         return (self.project_root / self.runs_dir).resolve()
@@ -59,4 +69,5 @@ class Settings(BaseSettings):
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
+    """Devuelve la instancia singleton de ``Settings`` (resultado en caché)."""
     return Settings()

@@ -26,6 +26,12 @@ def load_resources():
 
 
 def main() -> None:
+    """Punto de entrada de la interfaz Streamlit del chatbot institucional.
+
+    Configura el título y la leyenda de la página, carga el knowledge base y la cadena
+    LangChain (solo una vez, gracias al caché de Streamlit), y gestiona el bucle de
+    conversación mostrando el historial de mensajes y procesando nuevas preguntas.
+    """
     st.title("Asistente Virtual")
     st.caption("Fundación Valle del Lili · Información institucional, servicios y especialidades")
 

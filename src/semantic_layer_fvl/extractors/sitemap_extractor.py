@@ -1,3 +1,5 @@
+"""Extractor de URLs desde archivos sitemap XML de dominios configurados."""
+
 from __future__ import annotations
 
 import logging
@@ -24,11 +26,18 @@ _SITEMAP_NS = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
 
 
 def fetch_domain_urls(base_url: str, config: DomainConfig) -> list[str]:
-    """Return filtered URLs from the domain sitemap.
+    """Devuelve las URLs filtradas del sitemap XML de un dominio configurado.
 
-    Tries each path in config.sitemap_paths with browser-like headers.
-    Falls back to config.fallback_urls if all sitemaps fail or all URLs
-    are filtered out.
+    Intenta cada ruta en ``config.sitemap_paths`` con cabeceras de navegador.
+    Si todos los sitemaps fallan o todas las URLs son filtradas, utiliza
+    ``config.fallback_urls`` como respaldo.
+
+    Args:
+        base_url: URL base del sitio (sin barra final).
+        config: Configuración del dominio con rutas de sitemap y filtros de URL.
+
+    Returns:
+        Lista de URLs absolutas que superaron los filtros de inclusión/exclusión.
     """
     base = base_url.rstrip("/")
     for path in config.sitemap_paths:
@@ -51,6 +60,7 @@ def fetch_domain_urls(base_url: str, config: DomainConfig) -> list[str]:
 
 
 def _parse_sitemap(url: str) -> list[str]:
+    """Descarga y parsea un sitemap XML, devolviendo la lista de ``<loc>`` encontradas."""
     try:
         resp = requests.get(url, headers=_BROWSER_HEADERS, timeout=20)
         if resp.status_code != 200:
@@ -68,6 +78,7 @@ def _parse_sitemap(url: str) -> list[str]:
 
 
 def _apply_filters(urls: list[str], config: DomainConfig) -> list[str]:
+    """Aplica los filtros de inclusión y exclusión del dominio a la lista de URLs."""
     result: list[str] = []
     for url in urls:
         if config.url_include_patterns and not any(

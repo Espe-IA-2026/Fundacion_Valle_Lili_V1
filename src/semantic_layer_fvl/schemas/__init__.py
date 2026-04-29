@@ -1,3 +1,5 @@
+"""Submódulo de esquemas: expone todos los modelos Pydantic del dominio."""
+
 from semantic_layer_fvl.schemas.documents import (
     DocumentCategory,
     ExtractionMetadata,

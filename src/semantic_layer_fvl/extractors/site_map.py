@@ -1,3 +1,5 @@
+"""Definición de las URLs semilla iniciales para el pipeline de extracción."""
+
 from __future__ import annotations
 
 from urllib.parse import urljoin
@@ -69,6 +71,17 @@ _HTTP_URL_ADAPTER = TypeAdapter(AnyHttpUrl)
 
 
 def build_seed_urls(base_url: str | AnyHttpUrl) -> list[UrlRecord]:
+    """Construye y devuelve la lista de URLs semilla ordenada por prioridad.
+
+    Combina la ``base_url`` con cada ruta definida en ``DEFAULT_SEED_PATHS`` y
+    genera un ``UrlRecord`` por cada una.
+
+    Args:
+        base_url: URL base del sitio objetivo (p.ej. ``"https://valledellili.org"``).
+
+    Returns:
+        Lista de ``UrlRecord`` ordenada por prioridad ascendente.
+    """
     normalized_base_url = str(base_url)
     records = [
         UrlRecord(
