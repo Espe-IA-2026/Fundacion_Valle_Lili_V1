@@ -72,11 +72,6 @@ DOMAIN_CONFIGS: dict[str, DomainConfig] = {
         extra_metadata_selectors={},
         fallback_urls=[
             "https://valledellili.org/nuestra-institucion/",
-            "https://valledellili.org/nuestra-institucion/quienes-somos/",
-            "https://valledellili.org/nuestra-institucion/mision-vision-valores/",
-            "https://valledellili.org/nuestra-institucion/historia/",
-            "https://valledellili.org/nuestra-institucion/marco-legal/",
-            "https://valledellili.org/nuestra-institucion/politica-de-tratamiento-de-datos/",
         ],
     ),
 }
