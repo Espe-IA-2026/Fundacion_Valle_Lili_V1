@@ -38,4 +38,4 @@ chromedriver
 geckodriver
 
 # Carpeta data
-data/
+data/*
