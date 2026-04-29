@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
@@ -57,16 +57,12 @@ DOMAIN_CONFIGS: dict[str, DomainConfig] = {
     ),
     "institucional": DomainConfig(
         name="institucional",
-        sitemap_paths=["page-sitemap.xml", "wp-sitemap-posts-page-1.xml"],
-        container_selector=".ma-content",
+        sitemap_paths=["page-sitemap.xml"],
+        container_selector="main",
         output_folder="institucional",
         category="01_organizacion",
         url_include_patterns=[
-            "/nuestra-fundacion/",
-            "/historia/",
-            "/mision-y-vision/",
-            "/quienes-somos/",
-            "/nuestra-institucion/",
+            "/mision-valores-historia/",
         ],
         url_exclude_patterns=["/servicios/", "/especialistas/", "/sedes/"],
         extra_metadata_selectors={},

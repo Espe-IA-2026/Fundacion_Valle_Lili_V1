@@ -36,3 +36,6 @@ data/*.json
 # Selenium / WebDriver
 chromedriver
 geckodriver
+
+# Carpeta data
+data/

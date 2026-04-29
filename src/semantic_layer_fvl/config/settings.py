@@ -13,8 +13,8 @@ class Settings(BaseSettings):
 
     project_name: str = "semantic-layer-fvl"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
-    output_dir: Path = Path("./knowledge")
-    runs_dir: Path = Path("./runs")
+    output_dir: Path = Path("./data/knowledge")
+    runs_dir: Path = Path("./reports/runs")
 
     requests_per_second: float = Field(default=0.5, gt=0)
     request_timeout: int = Field(default=30, gt=0)
