@@ -56,8 +56,6 @@ KEYWORD_CATEGORY_RULES: tuple[tuple[tuple[str, ...], DocumentCategory], ...] = (
     (("noticia", "boletin", "actualidad"), DocumentCategory.NOTICIAS),
     (("video", "youtube", "multimedia"), DocumentCategory.MULTIMEDIA),
 )
-_RE_REAL_WORD = re.compile(r"[a-zA-ZáéíóúñüÁÉÍÓÚÑÜ]{4,}")
-_RE_NOISE_START = re.compile(r"^(?:https?://|!\[|/[\w./%-]{5,})")
 
 _RE_MD_LINK = re.compile(r'\[([^\]\n]+)\]\([^\)\n]+\)')
 _RE_REAL_WORD = re.compile(r'[a-zA-ZáéíóúñüÁÉÍÓÚÑÜ]{4,}')
