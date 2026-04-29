@@ -1,3 +1,5 @@
+"""Pipeline de extremo a extremo: extracción, procesamiento y escritura de documentos Markdown."""
+
 from __future__ import annotations
 
 import logging
@@ -31,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 class SemanticPipeline:
-    """End-to-end pipeline from extraction to Markdown output."""
+    """Pipeline de extremo a extremo desde la extracción hasta la salida en Markdown."""
 
     def __init__(
         self,
@@ -44,7 +46,7 @@ class SemanticPipeline:
         structurer: SemanticStructurer | None = None,
         writer: MarkdownWriter | None = None,
     ) -> None:
-        """Initialize the pipeline dependencies and default services."""
+        """Inicializa las dependencias del pipeline; crea servicios por defecto si no se inyectan."""
 
         self.settings = settings or get_settings()
         self.crawler = crawler or WebCrawler(settings=self.settings)
@@ -64,7 +66,7 @@ class SemanticPipeline:
         *,
         category: DocumentCategory | None = None,
     ) -> ProcessedDocument:
-        """Clean and structure a raw page into a processed document."""
+        """Limpia y estructura una página cruda en un documento procesado."""
 
         cleaned_text = self.cleaner.clean(raw_page.text_content)
         processed = self.structurer.build_document(
@@ -81,7 +83,7 @@ class SemanticPipeline:
         category: DocumentCategory | None = None,
         write: bool = False,
     ) -> list[tuple[ProcessedDocument, Path | None]]:
-        """Process multiple raw pages and optionally write each result."""
+        """Procesa múltiples páginas crudas y opcionalmente escribe cada resultado."""
 
         results: list[tuple[ProcessedDocument, Path | None]] = []
         for raw_page in raw_pages:
@@ -97,7 +99,7 @@ class SemanticPipeline:
         category: DocumentCategory | None = None,
         write: bool = False,
     ) -> tuple[ProcessedDocument, Path | None]:
-        """Fetch a URL, process it and optionally write the result."""
+        """Obtiene una URL, la procesa y opcionalmente escribe el resultado."""
 
         raw_page = self.crawler.fetch(str(url))
         processed = self.process_raw_page(raw_page, category=category)
@@ -111,7 +113,7 @@ class SemanticPipeline:
         *,
         write: bool = False,
     ) -> list[tuple[ProcessedDocument, Path | None]]:
-        """Fetch and process a public YouTube Atom feed."""
+        """Obtiene y procesa un feed Atom público de YouTube."""
 
         raw_pages = self.youtube_extractor.fetch_feed(feed_url)
         return self.process_raw_pages(
@@ -126,7 +128,7 @@ class SemanticPipeline:
         *,
         write: bool = False,
     ) -> list[tuple[ProcessedDocument, Path | None]]:
-        """Fetch and process a public news RSS or Atom feed."""
+        """Obtiene y procesa un feed RSS o Atom público de noticias."""
 
         raw_pages = self.news_extractor.fetch_feed(feed_url)
         return self.process_raw_pages(
@@ -141,7 +143,7 @@ class SemanticPipeline:
         limit: int | None = None,
         write: bool = False,
     ) -> PipelineRunSummary:
-        """Process the configured seed URLs, optionally limited by count."""
+        """Procesa las URLs semilla configuradas, opcionalmente limitadas por cantidad."""
 
         base_url = str(self.settings.target_base_url)
         urls = [str(record.url) for record in build_seed_urls(base_url)]
@@ -155,10 +157,10 @@ class SemanticPipeline:
         max_pages: int = 50,
         write: bool = False,
     ) -> PipelineRunSummary:
-        """Run a breadth-first crawl from seeds and follow internal links.
+        """Ejecuta un rastreo BFS desde las semillas siguiendo los enlaces internos encontrados.
 
-        Processes up to ``max_pages`` pages. Blocked URLs are skipped and
-        other errors are recorded as failures in the summary.
+        Procesa hasta ``max_pages`` páginas. Las URLs bloqueadas se omiten y los demás
+        errores se registran como fallos en el resumen de corrida.
         """
 
         summary = PipelineRunSummary(write_enabled=write)
@@ -208,7 +210,7 @@ class SemanticPipeline:
         write: bool = False,
         category: DocumentCategory | None = None,
     ) -> PipelineRunSummary:
-        """Process a list of web URLs and collect their outcomes."""
+        """Procesa una lista de URLs web y recopila sus resultados en un resumen."""
 
         summary = PipelineRunSummary(write_enabled=write)
         for url in urls:
@@ -242,7 +244,7 @@ class SemanticPipeline:
         *,
         write: bool = False,
     ) -> PipelineRunSummary:
-        """Process multiple YouTube feeds and collect their outcomes."""
+        """Procesa múltiples feeds de YouTube y recopila sus resultados."""
 
         summary = PipelineRunSummary(write_enabled=write)
         for feed_url in feed_urls:
@@ -276,7 +278,7 @@ class SemanticPipeline:
         *,
         write: bool = False,
     ) -> PipelineRunSummary:
-        """Process multiple news feeds and collect their outcomes."""
+        """Procesa múltiples feeds de noticias y recopila sus resultados."""
 
         summary = PipelineRunSummary(write_enabled=write)
         for feed_url in feed_urls:
@@ -312,7 +314,7 @@ class SemanticPipeline:
         news_feed_urls: list[str] | None = None,
         write: bool = False,
     ) -> PipelineRunSummary:
-        """Run the full pipeline across seeds, YouTube feeds and news feeds."""
+        """Ejecuta el pipeline completo: semillas, feeds de YouTube y feeds de noticias."""
 
         summary = PipelineRunSummary(write_enabled=write)
         partials = [
@@ -333,11 +335,11 @@ class SemanticPipeline:
         max_urls: int = 300,
         write: bool = False,
     ) -> PipelineRunSummary:
-        """Crawl a single configured domain through its sitemap.
+        """Rastrea un dominio configurado usando su sitemap XML.
 
-        For each URL, the pipeline fetches with the domain selector, builds
-        the document with the domain category and optionally writes it to the
-        domain subfolder.
+        Por cada URL obtiene la página con el selector del dominio, construye
+        el documento con la categoría del dominio y opcionalmente lo escribe
+        en la subcarpeta correspondiente.
         """
 
         from semantic_layer_fvl.domains import DOMAIN_CONFIGS
@@ -417,7 +419,7 @@ class SemanticPipeline:
         return self._finalize_summary(summary)
 
     def save_summary(self, summary: PipelineRunSummary) -> Path:
-        """Persist a pipeline summary to the runs directory."""
+        """Persiste un resumen de corrida en el directorio de runs como archivo JSON."""
 
         self.settings.resolved_runs_dir.mkdir(parents=True, exist_ok=True)
         timestamp = summary.started_at.astimezone(UTC).strftime("%Y%m%dT%H%M%SZ")
@@ -435,7 +437,7 @@ class SemanticPipeline:
         processed: ProcessedDocument,
         output_path: Path | None,
     ) -> PipelineItemResult:
-        """Build a successful pipeline item result."""
+        """Construye un ``PipelineItemResult`` exitoso a partir de un documento procesado."""
 
         return PipelineItemResult(
             source_type=source_type,
@@ -457,7 +459,7 @@ class SemanticPipeline:
         input_reference: str,
         error: Exception,
     ) -> PipelineItemResult:
-        """Build a failed pipeline item result."""
+        """Construye un ``PipelineItemResult`` de fallo con el mensaje de error capturado."""
 
         return PipelineItemResult(
             source_type=source_type,
@@ -468,7 +470,7 @@ class SemanticPipeline:
 
     @staticmethod
     def _finalize_summary(summary: PipelineRunSummary) -> PipelineRunSummary:
-        """Stamp the summary with the completion time and return it."""
+        """Registra la hora de finalización en el resumen y lo devuelve."""
 
         summary.finished_at = datetime.now(UTC)
         return summary

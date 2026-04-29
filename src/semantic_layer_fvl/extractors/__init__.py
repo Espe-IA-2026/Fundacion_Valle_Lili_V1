@@ -1,3 +1,5 @@
+"""Submódulo de extractores: expone los clientes HTTP, parsers de feeds y el crawler web."""
+
 from semantic_layer_fvl.extractors.http_client import HttpClient, RateLimiter
 from semantic_layer_fvl.extractors.news import NewsFeedExtractor
 from semantic_layer_fvl.extractors.robots import (

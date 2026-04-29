@@ -1,3 +1,5 @@
+"""Escritor de documentos procesados como archivos Markdown con frontmatter YAML."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -7,9 +9,14 @@ from semantic_layer_fvl.schemas import ProcessedDocument
 
 
 class MarkdownWriter:
-    """Renders processed documents to Markdown files with YAML frontmatter."""
+    """Renderiza documentos procesados como archivos Markdown con frontmatter YAML."""
 
     def __init__(self, settings: Settings | None = None) -> None:
+        """Inicializa el escritor con la configuración del proyecto.
+
+        Args:
+            settings: Configuración a utilizar. Si es ``None`` se obtiene la instancia global.
+        """
         self.settings = settings or get_settings()
 
     def resolve_output_path(
@@ -17,6 +24,15 @@ class MarkdownWriter:
         document: ProcessedDocument,
         domain_folder: str | None = None,
     ) -> Path:
+        """Calcula la ruta de salida del archivo Markdown para el documento dado.
+
+        Args:
+            document: Documento procesado con slug y categoría.
+            domain_folder: Subcarpeta de dominio; si es ``None`` usa el valor de la categoría.
+
+        Returns:
+            Ruta absoluta al archivo ``.md`` de salida.
+        """
         folder = domain_folder or document.document.category.value
         return (
             self.settings.resolved_output_dir / folder / f"{document.document.slug}.md"
@@ -27,6 +43,17 @@ class MarkdownWriter:
         document: ProcessedDocument,
         domain_folder: str | None = None,
     ) -> Path:
+        """Renderiza y escribe el documento como archivo Markdown en disco.
+
+        Crea los directorios intermedios si no existen.
+
+        Args:
+            document: Documento procesado a escribir.
+            domain_folder: Subcarpeta de dominio opcional.
+
+        Returns:
+            Ruta absoluta al archivo ``.md`` generado.
+        """
         output_path = self.resolve_output_path(document, domain_folder=domain_folder)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(
@@ -39,6 +66,15 @@ class MarkdownWriter:
         document: ProcessedDocument,
         domain_folder: str | None = None,
     ) -> str:
+        """Genera el contenido completo del archivo Markdown como cadena de texto.
+
+        Args:
+            document: Documento procesado a renderizar.
+            domain_folder: Subcarpeta de dominio opcional para el campo ``domain``.
+
+        Returns:
+            Cadena con frontmatter YAML seguido del cuerpo Markdown.
+        """
         frontmatter = self._build_frontmatter(document, domain_folder=domain_folder)
         body = document.content_markdown.strip()
         return f"---\n{frontmatter}\n---\n\n{body}\n"
@@ -48,6 +84,7 @@ class MarkdownWriter:
         document: ProcessedDocument,
         domain_folder: str | None = None,
     ) -> str:
+        """Construye el bloque YAML de frontmatter con todos los metadatos del documento."""
         doc = document.document
         meta = doc.extraction_metadata
         lines = [
@@ -94,4 +131,5 @@ class MarkdownWriter:
 
     @staticmethod
     def _escape(value: str) -> str:
+        """Escapa barras invertidas y comillas dobles para valores YAML seguros."""
         return value.replace("\\", "\\\\").replace('"', '\\"')

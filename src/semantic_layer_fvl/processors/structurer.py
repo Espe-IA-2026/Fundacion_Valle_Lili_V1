@@ -1,3 +1,5 @@
+"""Conversión de páginas crudas en documentos semánticos estructurados."""
+
 from __future__ import annotations
 
 import re
@@ -63,6 +65,14 @@ _RE_NOISE_START = re.compile(r'^(?:https?://|!\[|/[\w./%-]{5,})')
 
 
 def slugify(value: str) -> str:
+    """Convierte una cadena en un slug URL-safe en minúsculas sin acentos.
+
+    Args:
+        value: Texto a convertir (título, ruta u otro identificador).
+
+    Returns:
+        Slug normalizado, o ``"documento"`` si el resultado queda vacío.
+    """
     normalized = (
         unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode("ascii")
     )
@@ -71,9 +81,22 @@ def slugify(value: str) -> str:
 
 
 class SemanticStructurer:
-    """Converts cleaned raw pages into processed semantic documents."""
+    """Convierte páginas crudas limpias en documentos semánticos procesados."""
 
     def infer_category(self, raw_page: RawPage, cleaned_text: str) -> DocumentCategory:
+        """Infiere la categoría del documento a partir de la URL y el texto limpio.
+
+        Aplica primero las reglas por prefijo de ruta (``PATH_CATEGORY_RULES``) y,
+        si no hay coincidencia, las reglas por palabras clave (``KEYWORD_CATEGORY_RULES``).
+        Devuelve ``ORGANIZACION`` como categoría por defecto.
+
+        Args:
+            raw_page: Página cruda con la URL de origen.
+            cleaned_text: Texto limpio del contenido de la página.
+
+        Returns:
+            ``DocumentCategory`` inferida para el documento.
+        """
         path = urlsplit(str(raw_page.url)).path.lower()
         for prefix, category in PATH_CATEGORY_RULES:
             if path == prefix or path.startswith(f"{prefix}/"):
@@ -107,6 +130,21 @@ class SemanticStructurer:
         category: DocumentCategory | None = None,
         domain_name: str | None = None,
     ) -> ProcessedDocument:
+        """Construye un ``ProcessedDocument`` a partir de una página cruda y su texto limpio.
+
+        Si se indica ``domain_name``, usa el Markdown ya generado en ``raw_page.markdown``
+        y la categoría definida en la configuración del dominio; de lo contrario, infiere
+        la categoría y construye el cuerpo Markdown desde ``cleaned_text``.
+
+        Args:
+            raw_page: Página cruda con URL, título y metadatos de extracción.
+            cleaned_text: Texto limpio del contenido de la página.
+            category: Categoría a asignar manualmente (ignorada si se indica ``domain_name``).
+            domain_name: Nombre del dominio configurado (p.ej. ``"servicios"``).
+
+        Returns:
+            ``ProcessedDocument`` listo para ser escrito como archivo Markdown.
+        """
         if domain_name is not None:
             from semantic_layer_fvl.domains import DOMAIN_CONFIGS
 
@@ -149,6 +187,7 @@ class SemanticStructurer:
 
     @staticmethod
     def _resolve_title(raw_page: RawPage) -> str:
+        """Devuelve el título de la página, derivándolo de la URL si no está disponible."""
         if raw_page.title and raw_page.title.strip():
             return raw_page.title.strip()
 
@@ -159,6 +198,7 @@ class SemanticStructurer:
 
     @staticmethod
     def _resolve_slug(raw_page: RawPage, title: str) -> str:
+        """Genera el slug del documento a partir de la ruta de la URL o del título."""
         path = urlsplit(str(raw_page.url)).path.strip("/")
         if path:
             return slugify(path.rsplit("/", 1)[-1])
@@ -166,6 +206,15 @@ class SemanticStructurer:
 
     @staticmethod
     def _build_summary(cleaned_text: str, max_length: int = 220) -> str | None:
+        """Extrae el primer párrafo significativo del texto limpio como resumen del documento.
+
+        Args:
+            cleaned_text: Texto limpio con párrafos separados por líneas en blanco.
+            max_length: Longitud máxima del resumen en caracteres (por defecto 220).
+
+        Returns:
+            Cadena resumen truncada si es necesario, o ``None`` si no hay párrafo válido.
+        """
         stripped = cleaned_text.strip()
         if not stripped:
             return None
@@ -183,6 +232,7 @@ class SemanticStructurer:
 
     @staticmethod
     def _build_markdown_body(title: str, cleaned_text: str) -> str:
+        """Construye el cuerpo Markdown del documento con el título como H1 y los párrafos del texto."""
         paragraphs = [
             chunk.strip() for chunk in cleaned_text.split("\n\n") if chunk.strip()
         ]
@@ -200,6 +250,7 @@ class SemanticStructurer:
 
     @staticmethod
     def _extract_headings(markdown_body: str) -> list[str]:
+        """Extrae la lista de encabezados Markdown (sin prefijos ``#``) del cuerpo del documento."""
         headings: list[str] = []
         for line in markdown_body.splitlines():
             if line.startswith("#"):

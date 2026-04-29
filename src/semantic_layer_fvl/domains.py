@@ -1,3 +1,10 @@
+"""Configuración de dominios de scraping para el sitio de la Fundación Valle del Lili.
+
+Define la estructura ``DomainConfig`` y el diccionario ``DOMAIN_CONFIGS`` con los
+parámetros de extracción para cada sección del sitio (servicios, especialistas,
+sedes e institucional).
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -5,6 +12,23 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True)
 class DomainConfig:
+    """Parámetros de extracción para un dominio específico del sitio web.
+
+    Attributes:
+        name: Identificador corto del dominio (p.ej. ``"servicios"``).
+        sitemap_paths: Rutas relativas del sitemap XML a consultar.
+        container_selector: Selector CSS del contenedor principal de contenido.
+        output_folder: Subcarpeta de salida dentro del directorio de conocimiento.
+        category: Valor de ``DocumentCategory`` asignado a los documentos del dominio.
+        url_include_patterns: Patrones que debe contener la URL para ser procesada.
+        url_exclude_patterns: Patrones que excluyen una URL del procesamiento.
+        extra_metadata_selectors: Mapa ``{campo: selector_css}`` para metadatos extra.
+        fallback_urls: URLs de respaldo si el sitemap no devuelve resultados válidos.
+        trim_before_first_h1: Si es ``True``, elimina el contenido previo al primer H1.
+        markdown_cutoff_headings: Encabezados a partir de los cuales se trunca el Markdown.
+        specialists_section_heading: Encabezado de la sección de especialistas a reformatear.
+    """
+
     name: str
     sitemap_paths: list[str]
     container_selector: str
@@ -19,7 +43,7 @@ class DomainConfig:
     specialists_section_heading: str | None = None
 
 
-DOMAIN_CONFIGS: dict[str, DomainConfig] = {
+DOMAIN_CONFIGS: dict[str, DomainConfig] = {  # Configuraciones registradas por nombre de dominio
     "servicios": DomainConfig(
         name="servicios",
         sitemap_paths=["servicios-sitemap.xml"],
