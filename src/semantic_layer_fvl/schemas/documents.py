@@ -8,9 +8,10 @@ Incluye enumeraciones de categoría y estado, así como los modelos de datos
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from enum import StrEnum
+from typing import Literal
 
 from pydantic import AnyHttpUrl, BaseModel, Field
+from enum import StrEnum
 
 
 class DocumentCategory(StrEnum):
@@ -131,6 +132,11 @@ class SourceDocument(BaseModel):
     summary: str | None = None
     status: PublicationStatus = PublicationStatus.DRAFT
     extraction_metadata: ExtractionMetadata
+    source_type: Literal[
+        "web_fvl", "youtube_rich", "youtube_feed", "news_curated", "news_google", "news_feed"
+    ] | None = None
+    external_id: str | None = None
+    published_at: datetime | None = None
 
 
 class ProcessedDocument(BaseModel):

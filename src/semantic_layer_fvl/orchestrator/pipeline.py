@@ -427,11 +427,177 @@ class SemanticPipeline:
         output_path.write_text(summary.model_dump_json(indent=2), encoding="utf-8")
         return output_path
 
+    def run_youtube_search(
+        self,
+        queries: list[str],
+        *,
+        limit_per_query: int = 20,
+        write: bool = False,
+    ) -> PipelineRunSummary:
+        """Busca videos de YouTube por palabras clave y los procesa con metadatos enriquecidos.
+
+        Usa ``yt-dlp`` para obtener título, descripción completa, duración y transcripción.
+        Deduplica por URL canónica dentro de cada corrida.
+
+        Args:
+            queries: Lista de términos de búsqueda (p.ej. ``["Fundación Valle del Lili"]``).
+            limit_per_query: Máximo de videos a procesar por query.
+            write: Si es ``True`` escribe los documentos en disco.
+
+        Returns:
+            :class:`PipelineRunSummary` con los resultados de la corrida.
+        """
+        from semantic_layer_fvl.extractors.youtube_rich import YouTubeRichExtractor
+        from semantic_layer_fvl.processors.deduplicator import ContentDeduplicator
+
+        summary = PipelineRunSummary(write_enabled=write)
+        extractor = YouTubeRichExtractor(settings=self.settings)
+        dedup = ContentDeduplicator()
+
+        for query in queries:
+            try:
+                video_urls = extractor.search_videos(query, limit=limit_per_query)
+            except Exception as exc:
+                logger.exception("[pipeline] Error buscando YouTube para query: %s", query)
+                summary.results.append(
+                    self._build_failure_result(
+                        source_type="youtube_rich",
+                        input_reference=f"ytsearch:{query}",
+                        error=exc,
+                    )
+                )
+                continue
+
+            for video_url in video_urls:
+                if dedup.is_duplicate(video_url, None):
+                    logger.debug("[pipeline] Video duplicado, omitido: %s", video_url)
+                    continue
+                try:
+                    logger.info("[pipeline] youtube_rich -> %s", video_url)
+                    raw_page = extractor.fetch_video(video_url)
+                    processed = self.structurer.build_document(
+                        raw_page,
+                        raw_page.text_content or "",
+                        category=DocumentCategory.MULTIMEDIA,
+                    )
+                    output_path = self.writer.write(processed) if write else None
+                    summary.results.append(
+                        self._build_success_result(
+                            source_type="youtube_rich",
+                            input_reference=video_url,
+                            processed=processed,
+                            output_path=output_path,
+                        )
+                    )
+                except Exception as exc:
+                    logger.exception("[pipeline] Error procesando video: %s", video_url)
+                    summary.results.append(
+                        self._build_failure_result(
+                            source_type="youtube_rich",
+                            input_reference=video_url,
+                            error=exc,
+                        )
+                    )
+
+        return self._finalize_summary(summary)
+
+    def run_curated_news(
+        self,
+        *,
+        write: bool = False,
+        fetch_full: bool = False,
+    ) -> PipelineRunSummary:
+        """Procesa feeds de noticias curados y Google News con deduplicación cross-source.
+
+        Combina :data:`CURATED_NEWS_FEEDS` con feeds RSS de Google News generados
+        por :class:`GoogleNewsFeedBuilder`. Deduplica por URL canónica y checksum
+        de contenido para evitar duplicados entre fuentes.
+
+        Args:
+            write: Si es ``True`` escribe los documentos en disco.
+            fetch_full: Si es ``True`` intenta descargar el cuerpo completo del artículo
+                con :meth:`WebCrawler.fetch`. Aumenta la latencia considerablemente.
+
+        Returns:
+            :class:`PipelineRunSummary` con los resultados de la corrida.
+        """
+        from semantic_layer_fvl.extractors.google_news import GoogleNewsFeedBuilder
+        from semantic_layer_fvl.news_feeds import CURATED_NEWS_FEEDS
+        from semantic_layer_fvl.processors.deduplicator import ContentDeduplicator
+        from semantic_layer_fvl.processors.noise_presets import NEWS_NOISE
+
+        summary = PipelineRunSummary(write_enabled=write)
+        dedup = ContentDeduplicator()
+
+        google_builder = GoogleNewsFeedBuilder(
+            queries=self.settings.news_google_queries or None
+        )
+        feed_configs = [(f.url, f.name, f.extra_noise) for f in CURATED_NEWS_FEEDS]
+        for url in google_builder.feed_urls():
+            feed_configs.append((url, "Google News — FVL", frozenset()))
+
+        for feed_url, feed_name, extra_noise in feed_configs:
+            try:
+                self.news_extractor.source_name = feed_name
+                raw_pages = self.news_extractor.fetch_feed(feed_url)
+            except Exception as exc:
+                logger.exception("[pipeline] Error obteniendo feed: %s", feed_url)
+                summary.results.append(
+                    self._build_failure_result(
+                        source_type="news_curated",
+                        input_reference=feed_url,
+                        error=exc,
+                    )
+                )
+                continue
+
+            from semantic_layer_fvl.processors.cleaner import TextCleaner as _Cleaner
+            cleaner = _Cleaner(extra_noise=NEWS_NOISE | extra_noise)
+
+            for raw_page in raw_pages:
+                url_str = str(raw_page.url)
+                if dedup.is_duplicate(url_str, raw_page.text_content):
+                    logger.debug("[pipeline] Noticia duplicada, omitida: %s", url_str)
+                    continue
+                try:
+                    if fetch_full:
+                        try:
+                            full_page = self.crawler.fetch(url_str)
+                            raw_page = full_page
+                        except Exception:
+                            pass
+
+                    cleaned = cleaner.clean(raw_page.text_content or "")
+                    processed = self.structurer.build_document(
+                        raw_page, cleaned, category=DocumentCategory.NOTICIAS
+                    )
+                    output_path = self.writer.write(processed) if write else None
+                    summary.results.append(
+                        self._build_success_result(
+                            source_type="news_curated",
+                            input_reference=url_str,
+                            processed=processed,
+                            output_path=output_path,
+                        )
+                    )
+                except Exception as exc:
+                    logger.exception("[pipeline] Error procesando noticia: %s", url_str)
+                    summary.results.append(
+                        self._build_failure_result(
+                            source_type="news_curated",
+                            input_reference=url_str,
+                            error=exc,
+                        )
+                    )
+
+        return self._finalize_summary(summary)
+
     @staticmethod
     def _build_success_result(
         *,
         source_type: Literal[
-            "web", "youtube_feed", "news_feed", "web_discovered", "web_domain"
+            "web", "youtube_feed", "youtube_rich", "news_feed", "news_curated",
+            "web_discovered", "web_domain",
         ],
         input_reference: str,
         processed: ProcessedDocument,
@@ -454,7 +620,8 @@ class SemanticPipeline:
     def _build_failure_result(
         *,
         source_type: Literal[
-            "web", "youtube_feed", "news_feed", "web_discovered", "web_domain"
+            "web", "youtube_feed", "youtube_rich", "news_feed", "news_curated",
+            "web_discovered", "web_domain",
         ],
         input_reference: str,
         error: Exception,

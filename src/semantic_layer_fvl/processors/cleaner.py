@@ -8,15 +8,23 @@ import re
 class TextCleaner:
     """Normaliza texto extraído y elimina ruido de navegación común."""
 
-    def __init__(self, *, min_line_length: int = 2) -> None:
+    def __init__(
+        self,
+        *,
+        min_line_length: int = 2,
+        extra_noise: frozenset[str] | set[str] | None = None,
+    ) -> None:
         """Inicializa el limpiador de texto.
 
         Args:
             min_line_length: Longitud mínima de caracteres que debe tener una línea
                 para no ser descartada como ruido.
+            extra_noise: Conjunto adicional de líneas de ruido específicas de la fuente.
+                Se fusiona con el conjunto base predeterminado. Puede pasarse uno de los
+                presets definidos en :mod:`semantic_layer_fvl.processors.noise_presets`.
         """
         self.min_line_length = min_line_length
-        self._noise_lines = {
+        base_noise: set[str] = {
             "menu",
             "inicio",
             "home",
@@ -29,6 +37,7 @@ class TextCleaner:
             "twitter",
             "x",
         }
+        self._noise_lines = base_noise | (extra_noise or set())
 
     def clean(self, text: str | None) -> str:
         """Limpia y normaliza el texto eliminando duplicados y líneas de ruido.
