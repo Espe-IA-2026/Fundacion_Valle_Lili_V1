@@ -101,6 +101,15 @@ class MarkdownWriter:
             f'extractor_name: "{MarkdownWriter._escape(meta.extractor_name)}"',
         ]
 
+        if doc.source_type:
+            lines.append(f'source_type: "{MarkdownWriter._escape(doc.source_type)}"')
+
+        if doc.external_id:
+            lines.append(f'external_id: "{MarkdownWriter._escape(doc.external_id)}"')
+
+        if doc.published_at:
+            lines.append(f'published_at: "{doc.published_at.date().isoformat()}"')
+
         if doc.summary:
             lines.append(f'summary: "{MarkdownWriter._escape(doc.summary)}"')
 

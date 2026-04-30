@@ -23,7 +23,10 @@ class PipelineItemResult(BaseModel):
         error: Mensaje de error si el procesamiento falló.
     """
 
-    source_type: Literal["web", "youtube_feed", "news_feed", "web_discovered", "web_domain"]
+    source_type: Literal[
+        "web", "youtube_feed", "youtube_rich", "news_feed", "news_curated",
+        "web_discovered", "web_domain",
+    ]
     input_reference: str
     success: bool
     title: str | None = None

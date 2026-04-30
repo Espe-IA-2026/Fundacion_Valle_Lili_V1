@@ -1,13 +1,18 @@
-"""Cliente HTTP compartido con limitación de tasa para el pipeline de extracción."""
+"""Cliente HTTP compartido con limitación de tasa y reintentos para el pipeline de extracción."""
 
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import Callable
 
 import httpx
 
 from semantic_layer_fvl.config import Settings, get_settings
+
+logger = logging.getLogger(__name__)
+
+_RETRYABLE_STATUS: frozenset[int] = frozenset({429, 500, 502, 503, 504})
 
 
 class RateLimiter:
@@ -83,16 +88,62 @@ class HttpClient:
         )
 
     def get(self, url: str) -> httpx.Response:
-        """Realiza una petición GET respetando el intervalo de tasa configurado.
+        """Realiza una petición GET con limitación de tasa y reintentos con backoff exponencial.
+
+        Reintenta automáticamente en errores transitorios (5xx, 429, timeout, conexión).
+        Respeta el encabezado ``Retry-After`` cuando el servidor lo envía.
 
         Args:
             url: URL absoluta del recurso a obtener.
 
         Returns:
             Objeto ``httpx.Response`` con la respuesta del servidor.
+
+        Raises:
+            httpx.TimeoutException: Si todos los intentos agotan el tiempo de espera.
+            httpx.ConnectError: Si todos los intentos fallan por error de conexión.
         """
-        self.rate_limiter.wait()
-        return self._client.get(url)
+        last_exc: Exception | None = None
+        response: httpx.Response | None = None
+
+        for attempt in range(self.settings.max_retries + 1):
+            if attempt > 0:
+                wait = self._backoff_seconds(response, attempt - 1)
+                logger.warning(
+                    "Reintentando %s (intento %d/%d) en %.1fs",
+                    url, attempt, self.settings.max_retries, wait,
+                )
+                time.sleep(wait)
+
+            self.rate_limiter.wait()
+            try:
+                response = self._client.get(url)
+            except (httpx.TimeoutException, httpx.ConnectError) as exc:
+                last_exc = exc
+                continue
+
+            if response.status_code not in _RETRYABLE_STATUS:
+                return response
+
+        if last_exc is not None:
+            raise last_exc
+        return response  # type: ignore[return-value]
+
+    @staticmethod
+    def _backoff_seconds(response: httpx.Response | None, attempt: int) -> float:
+        """Calcula los segundos de espera antes del siguiente reintento.
+
+        Respeta el encabezado ``Retry-After`` si está presente; de lo contrario
+        usa backoff exponencial: 1s, 2s, 4s, …
+        """
+        if response is not None:
+            retry_after = response.headers.get("Retry-After")
+            if retry_after:
+                try:
+                    return float(retry_after)
+                except ValueError:
+                    pass
+        return float(2**attempt)
 
     def _build_default_headers(self) -> dict[str, str]:
         """Construye el diccionario de cabeceras HTTP predeterminadas."""

@@ -135,6 +135,50 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Guarda el resumen de corrida en el directorio de runs.",
     )
+    youtube_search_parser = subparsers.add_parser(
+        "youtube-search",
+        help="Busca videos de YouTube por palabra clave y los procesa con metadatos enriquecidos.",
+    )
+    youtube_search_parser.add_argument(
+        "query",
+        nargs="+",
+        help="Términos de búsqueda (pueden pasarse varios).",
+    )
+    youtube_search_parser.add_argument(
+        "--limit",
+        type=int,
+        default=20,
+        help="Máximo de videos a procesar por query (default: 20).",
+    )
+    youtube_search_parser.add_argument(
+        "--write",
+        action="store_true",
+        help="Escribe los documentos generados en el directorio de salida.",
+    )
+    youtube_search_parser.add_argument(
+        "--save-summary",
+        action="store_true",
+        help="Guarda el resumen de corrida en el directorio de runs.",
+    )
+    news_curated_parser = subparsers.add_parser(
+        "news-curated",
+        help="Procesa feeds de noticias curados y Google News con deduplicación cross-source.",
+    )
+    news_curated_parser.add_argument(
+        "--write",
+        action="store_true",
+        help="Escribe los documentos generados en el directorio de salida.",
+    )
+    news_curated_parser.add_argument(
+        "--fetch-full",
+        action="store_true",
+        help="Descarga el cuerpo completo del artículo (más lento, más contenido).",
+    )
+    news_curated_parser.add_argument(
+        "--save-summary",
+        action="store_true",
+        help="Guarda el resumen de corrida en el directorio de runs.",
+    )
     crawl_domain_parser = subparsers.add_parser(
         "crawl-domain",
         help="Crawlea un dominio especifico usando su sitemap XML.",
@@ -212,6 +256,27 @@ def handle_youtube_feed(feed_url: str, *, write: bool) -> int:
         if output_path is not None:
             print(f'output_path="{output_path}"')
     return 0
+
+
+def handle_youtube_search(queries: list[str], *, limit: int, write: bool, save_summary: bool) -> int:
+    """Busca videos de YouTube por palabra clave y los procesa con metadatos enriquecidos."""
+
+    pipeline = SemanticPipeline()
+    summary = pipeline.run_youtube_search(queries, limit_per_query=limit, write=write)
+    summary_path = str(pipeline.save_summary(summary)) if save_summary else None
+    print(f"queries={queries}")
+    print_summary(summary, summary_path=summary_path)
+    return 0 if summary.failure_count == 0 else 1
+
+
+def handle_news_curated(*, write: bool, fetch_full: bool, save_summary: bool) -> int:
+    """Procesa feeds de noticias curados y Google News con deduplicación cross-source."""
+
+    pipeline = SemanticPipeline()
+    summary = pipeline.run_curated_news(write=write, fetch_full=fetch_full)
+    summary_path = str(pipeline.save_summary(summary)) if save_summary else None
+    print_summary(summary, summary_path=summary_path)
+    return 0 if summary.failure_count == 0 else 1
 
 
 def handle_news_feed(feed_url: str, *, write: bool) -> int:
@@ -325,6 +390,19 @@ def main() -> int:
         return handle_crawl_once(args.url, write=args.write)
     if args.command == "youtube-feed":
         return handle_youtube_feed(args.feed_url, write=args.write)
+    if args.command == "youtube-search":
+        return handle_youtube_search(
+            args.query,
+            limit=args.limit,
+            write=args.write,
+            save_summary=args.save_summary,
+        )
+    if args.command == "news-curated":
+        return handle_news_curated(
+            write=args.write,
+            fetch_full=args.fetch_full,
+            save_summary=args.save_summary,
+        )
     if args.command == "news-feed":
         return handle_news_feed(args.feed_url, write=args.write)
     if args.command == "crawl-domain":

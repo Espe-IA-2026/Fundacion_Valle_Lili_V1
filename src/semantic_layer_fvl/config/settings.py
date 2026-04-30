@@ -35,6 +35,18 @@ class Settings(BaseSettings):
     news_feed_limit: int = Field(default=50, ge=1)
     news_search_days: int = Field(default=365, ge=1)
 
+    youtube_search_queries: list[str] = Field(
+        default=["Fundación Valle del Lili", "Hospital Valle del Lili"],
+    )
+    youtube_transcript_languages: list[str] = Field(
+        default=["es", "es-419", "es-CO", "en"],
+    )
+    news_curated_enabled: bool = True
+    news_google_queries: list[str] = Field(
+        default=["Fundación Valle del Lili", "FVL Cali"],
+    )
+    news_fetch_full_article: bool = False
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
