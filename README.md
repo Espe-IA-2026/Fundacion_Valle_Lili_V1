@@ -26,47 +26,58 @@ Resultado esperado:
 ## 2. Arquitectura End-to-End
 
 ```text
-valledellili.org + sitemaps + feeds
-            |
-            v
-extractors (sitemap, crawler, feeds)
-            |
-            v
-RawPage (Pydantic)
-            |
-            v
-processors (cleaner + structurer)
-            |
-            v
-ProcessedDocument (Pydantic)
-            |
-            v
-writers (markdown + frontmatter)
-            |
-            v
-data/knowledge/<dominio>/<slug>.md
-            |
-            v
-app.engine -> contexto consolidado + compactacion
-            |
-            v
-LangChain + OpenAI (NO-RAG)
-   ┌────────┼────────────┐
-   v        v            v
-Q&A chain  Summary chain FAQ chain
-            |
-            v
-Streamlit dashboard (3 pestañas)
+valledellili.org      YouTube (yt-dlp)      Feeds RSS curados
+  + sitemaps           + transcripciones      + Google News RSS
+      |                      |                      |
+      v                      v                      v
+ WebCrawler          YouTubeRichExtractor    NewsFeedExtractor
+      |                      |                      |
+      └──────────────────────┴──────────────────────┘
+                             |
+                             v
+                    ContentDeduplicator
+                    (URL canonica + SHA-256)
+                             |
+                             v
+                      RawPage (Pydantic)
+                             |
+                             v
+               processors (TextCleaner + structurer)
+                  [presets: WEB_FVL / NEWS / YOUTUBE]
+                             |
+                             v
+                   ProcessedDocument (Pydantic)
+                             |
+                             v
+               writers (markdown + frontmatter YAML)
+                  [source_type · external_id · published_at]
+                             |
+                             v
+         data/knowledge/<dominio>/<slug>.md
+                             |
+                             v
+          app.engine -> contexto consolidado + compactacion
+                             |
+                             v
+                   LangChain LCEL + OpenAI (NO-RAG)
+                   ┌────────────┼──────────────┐
+                   v            v              v
+               Q&A chain  Summary chain   FAQ chain
+               (streaming)
+                                |
+                                v
+                   Streamlit dashboard (3 pestanas)
+                   [wide layout · sidebar · CSS profesional]
 ```
 
 Capas principales:
 
-- `src/semantic_layer_fvl/extractors`: scraping y fuentes.
-- `src/semantic_layer_fvl/processors`: limpieza y estructuracion.
-- `src/semantic_layer_fvl/writers`: persistencia a Markdown.
-- `src/semantic_layer_fvl/orchestrator/pipeline.py`: coordinacion del flujo.
-- `src/app/engine.py`: motor del chatbot con contexto consolidado.
-- `src/app/main.py`: frontend Streamlit.
+- `src/semantic_layer_fvl/extractors`: scraping, YouTube enriquecido, feeds RSS y Google News.
+- `src/semantic_layer_fvl/processors`: limpieza configurable y deduplicacion cross-source.
+- `src/semantic_layer_fvl/writers`: persistencia a Markdown con frontmatter extendido.
+- `src/semantic_layer_fvl/orchestrator/pipeline.py`: coordinacion del flujo y nuevos metodos de fuentes externas.
+- `src/app/engine.py`: motor del chatbot con contexto consolidado y streaming LCEL.
+- `src/app/main.py`: frontend Streamlit profesional.
 
 ---
 
@@ -79,13 +90,29 @@ Definidos en `src/semantic_layer_fvl/domains.py`:
 - `sedes`
 - `institucional`
 
-Cada dominio define:
+Cada dominio define sitemaps, patrones include/exclude de URL, selector principal de contenido, metadatos extra por selector y reglas de corte y limpieza de markdown.
 
-- sitemaps
-- patrones include/exclude de URL
-- selector principal de contenido
-- metadatos extra por selector
-- reglas de corte y limpieza de markdown
+---
+
+## 3b. Fuentes Externas (Iteracion 2)
+
+Fuentes adicionales legalmente accesibles que amplian el corpus:
+
+| Tipo | Comando CLI | Carpeta destino | Requiere auth |
+|---|---|---|---|
+| YouTube enriquecido (yt-dlp) | `youtube-search` | `data/knowledge/10_multimedia/` | No |
+| Noticias curadas (RSS) | `news-curated` | `data/knowledge/09_noticias/` | No |
+| Google News RSS por keyword | incluido en `news-curated` | `data/knowledge/09_noticias/` | No |
+| Feeds personalizados | `youtube-feed` / `news-feed` | segun comando | No |
+
+**Redes sociales (LinkedIn, Instagram, Twitter/X)**: no se incluyen por restricciones de TOS y riesgo de bloqueo. Si la FVL provee tokens oficiales en el futuro, se pueden agregar sin refactor mayor.
+
+Componentes de soporte agregados en la iteracion 2:
+
+- `ContentDeduplicator` — deduplicacion por URL canonica y checksum SHA-256 del contenido.
+- `TextCleaner` configurable con presets `WEB_FVL_NOISE`, `NEWS_NOISE`, `YOUTUBE_NOISE`.
+- `HttpClient.get()` con retry exponencial (respeta `Retry-After`; usa `MAX_RETRIES` del settings).
+- Campos opcionales en `SourceDocument`: `source_type`, `external_id`, `published_at`.
 
 ---
 
@@ -187,6 +214,12 @@ Variables de control (`.env`):
 ├── .env.example
 ├── data/
 │   ├── knowledge/
+│   │   ├── 01_servicios/
+│   │   ├── 02_especialistas/
+│   │   ├── 03_sedes/
+│   │   ├── 04_institucional/
+│   │   ├── 09_noticias/          ← noticias curadas + Google News
+│   │   └── 10_multimedia/        ← videos YouTube enriquecidos
 │   ├── debug_context.txt
 │   └── debug_context_raw.txt
 ├── reports/
@@ -195,16 +228,30 @@ Variables de control (`.env`):
 │   ├── semantic_layer_fvl/
 │   │   ├── cli.py
 │   │   ├── domains.py
+│   │   ├── news_feeds.py         ← feeds curados + queries de busqueda
 │   │   ├── config/
 │   │   ├── extractors/
+│   │   │   ├── google_news.py    ← GoogleNewsFeedBuilder
+│   │   │   ├── youtube_rich.py   ← YouTubeRichExtractor (yt-dlp)
+│   │   │   ├── http_client.py    ← retry con backoff exponencial
+│   │   │   └── ...
 │   │   ├── processors/
+│   │   │   ├── deduplicator.py   ← ContentDeduplicator
+│   │   │   ├── noise_presets.py  ← WEB_FVL_NOISE, NEWS_NOISE, YOUTUBE_NOISE
+│   │   │   └── ...
 │   │   ├── schemas/
 │   │   ├── writers/
 │   │   └── orchestrator/
 │   └── app/
-│       ├── engine.py
-│       └── main.py
-└── tests/
+│       ├── engine.py             ← cadenas LCEL + stream_response()
+│       └── main.py               ← frontend profesional Streamlit
+└── tests/                        ← 88 tests (offline, sin llamadas reales)
+    ├── test_http_retry.py
+    ├── test_deduplicator.py
+    ├── test_youtube_rich.py
+    ├── test_google_news.py
+    ├── test_cleaner_presets.py
+    └── ...
 ```
 
 ---
@@ -268,11 +315,37 @@ uv run semantic-layer-fvl crawl-domain servicios --write --max-urls 50
 
 ### 10.2 Otros comandos CLI
 
+**Web FVL:**
+
 ```powershell
 uv run semantic-layer-fvl crawl-once https://valledellili.org/quienes-somos --write
 uv run semantic-layer-fvl crawl-seeds --limit 10 --write --save-summary
 uv run semantic-layer-fvl crawl-discover --max-pages 50 --write --save-summary
+```
+
+**YouTube enriquecido** (usa yt-dlp; sin descarga de video):
+
+```powershell
+# Busqueda por keyword → metadatos + transcripciones → data/knowledge/10_multimedia/
+uv run semantic-layer-fvl youtube-search "Fundacion Valle del Lili" --limit 20 --write
+
+# Multiples queries
+uv run semantic-layer-fvl youtube-search "FVL Cali" "trasplantes Colombia" --limit 10 --write
+
+# Feed oficial del canal (extractor ligero, sin transcripciones)
 uv run semantic-layer-fvl youtube-feed <feed_url> --write
+```
+
+**Noticias curadas** (medios locales + Google News RSS, sin auth):
+
+```powershell
+# Procesa feeds curados + Google News → data/knowledge/09_noticias/
+uv run semantic-layer-fvl news-curated --write
+
+# Con articulo completo (hace fetch del cuerpo del medio, no solo el resumen RSS)
+uv run semantic-layer-fvl news-curated --write --fetch-full
+
+# Feed RSS personalizado
 uv run semantic-layer-fvl news-feed <feed_url> --write
 ```
 
@@ -333,19 +406,36 @@ Copy-Item .env.example .env
 Valores minimos recomendados:
 
 ```dotenv
+# Requerido para la app
 OPENAI_API_KEY=<tu_api_key>
 OPENAI_MODEL=gpt-4o-mini
 KNOWLEDGE_DIR=data/knowledge
+
+# Presupuestos de inferencia
 RESPONSE_MAX_TOKENS=500
 SUMMARY_MAX_TOKENS=900
 FAQ_MAX_TOKENS=1200
 HISTORY_MAX_TURNS=6
 HISTORY_MAX_CHARS=3500
 HISTORY_ITEM_MAX_CHARS=700
+
+# Compactacion de contexto
 LINE_LEXICON_ENABLED=true
 LINE_LEXICON_MIN_COUNT=5
 LINE_LEXICON_MIN_LEN=24
 LINE_LEXICON_MAX_ENTRIES=350
+
+# Retry HTTP
+MAX_RETRIES=2
+
+# YouTube enriquecido (opcional)
+YOUTUBE_SEARCH_LIMIT=20
+YOUTUBE_TRANSCRIPT_LANGUAGES=["es","es-419","en"]
+
+# Noticias curadas (opcional)
+NEWS_CURATED_ENABLED=true
+NEWS_FETCH_FULL_ARTICLE=false
+NEWS_FEED_LIMIT=50
 ```
 
 ### Paso 4. Verificar instalacion
@@ -357,11 +447,23 @@ uv run pytest -q
 
 ### Paso 5. Generar base de conocimiento
 
+**Fuentes oficiales FVL** (obligatorio):
+
 ```powershell
 uv run semantic-layer-fvl crawl-domain servicios --write
 uv run semantic-layer-fvl crawl-domain especialistas --write
 uv run semantic-layer-fvl crawl-domain sedes --write
 uv run semantic-layer-fvl crawl-domain institucional --write
+```
+
+**Fuentes externas** (opcional, amplia el corpus):
+
+```powershell
+# Videos YouTube con metadatos y transcripciones
+uv run semantic-layer-fvl youtube-search "Fundacion Valle del Lili" --limit 20 --write
+
+# Noticias de medios locales + Google News RSS
+uv run semantic-layer-fvl news-curated --write
 ```
 
 ### Paso 6. Iniciar app
@@ -387,19 +489,29 @@ uv run python -c "import pathlib; raw=pathlib.Path('data/debug_context_raw.txt')
 
 ## 12. Testing
 
-Ejecutar toda la suite:
+Ejecutar toda la suite (88 tests, todos offline):
 
 ```powershell
 uv run pytest
+uv run pytest -q   # salida compacta
 ```
 
-La suite es offline y cubre, entre otros:
+Cobertura:
 
-- settings/config
-- schemas Pydantic
-- crawler y reglas de limpieza
-- pipeline
-- CLI
+| Archivo de test | Que cubre |
+|---|---|
+| `test_settings.py` | Config y variables de entorno |
+| `test_schemas.py` | Modelos Pydantic |
+| `test_crawler.py` | WebCrawler y reglas de limpieza |
+| `test_pipeline.py` | SemanticPipeline |
+| `test_cli.py` | Comandos CLI |
+| `test_http_retry.py` | Retry con backoff exponencial (503, 429, timeout) |
+| `test_deduplicator.py` | Deduplicacion por URL canonica y checksum SHA-256 |
+| `test_youtube_rich.py` | YouTubeRichExtractor con mock de yt-dlp |
+| `test_google_news.py` | Construccion de URL RSS de Google News |
+| `test_cleaner_presets.py` | Presets de ruido (WEB_FVL, NEWS, YOUTUBE) |
+
+Todos los tests usan mocks de httpx y yt-dlp — no se realizan llamadas reales a YouTube ni a Google News.
 
 ---
 
@@ -434,6 +546,17 @@ La suite es offline y cubre, entre otros:
 
 ## 15. Estado del Modulo
 
-Estado actual: funcional para construccion de base semantica + dashboard NO-RAG con tres funcionalidades LLM (Q&A, Resumen, FAQ) y optimizaciones de costo de inferencia.
+**Iteracion 1 (base):** pipeline de extraccion web para `valledellili.org` (4 dominios) + dashboard Streamlit NO-RAG con tres cadenas LangChain LCEL (Q&A, Resumen, FAQ) y optimizaciones de costo de inferencia.
 
-Siguiente paso natural (si el curso lo permite): evolucionar a recuperacion selectiva por documentos/chunks (RAG) — el modulo `TextChunker` en `processors/chunker.py` ya esta implementado y reservado para esa fase.
+**Iteracion 2 (fuentes externas):**
+
+- YouTubeRichExtractor con yt-dlp: metadatos, transcripciones VTT/json3 y busqueda por keyword.
+- Noticias curadas: 7 feeds RSS de medios locales (El Tiempo, El Pais, Semana, El Espectador, Caracol, Blu, RCN) + Google News RSS por keyword.
+- ContentDeduplicator: deduplicacion cross-source por URL canonica y checksum SHA-256.
+- TextCleaner configurable con presets de ruido por tipo de fuente.
+- HttpClient con retry exponencial (respeta `Retry-After`).
+- Campos de frontmatter extendidos: `source_type`, `external_id`, `published_at`.
+- Frontend Streamlit rediseñado: layout wide, sidebar, CSS profesional, streaming en Q&A.
+- 88 tests unitarios offline.
+
+**Siguiente paso natural (Modulo 2):** evolucionar a recuperacion selectiva por documentos/chunks (RAG). El modulo `TextChunker` en `processors/chunker.py` ya esta implementado y reservado para esa fase.
