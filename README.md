@@ -1,601 +1,431 @@
-# Capa Semántica — Fundación Valle del Lili
+# Asistente Virtual FVL - Modulo 1
 
-Pipeline automatizado que extrae, estructura y almacena información pública de la **Fundación Valle del Lili** en una base de conocimiento Markdown enriquecido. Esta base de conocimiento está diseñada para alimentar un sistema agéntico y un chatbot especializado en servicios, especialidades y noticias de la institución.
+Pipeline de extraccion y estructuracion de conocimiento para la Fundacion Valle del Lili + dashboard Streamlit con tres funcionalidades de LLM orquestadas con LangChain.
 
----
-
-## Tabla de Contenidos
-
-1. [Qué hace el proyecto](#qué-hace-el-proyecto)
-2. [Principios éticos y legales](#principios-éticos-y-legales)
-3. [Arquitectura](#arquitectura)
-4. [Stack tecnológico](#stack-tecnológico)
-5. [Estructura del proyecto](#estructura-del-proyecto)
-6. [Configuración](#configuración)
-7. [Comandos CLI](#comandos-cli)
-8. [API REST](#api-rest)
-9. [Búsqueda semántica](#búsqueda-semántica)
-10. [Taxonomía del knowledge base](#taxonomía-del-knowledge-base)
-11. [Fuentes de datos](#fuentes-de-datos)
-12. [Testing](#testing)
-13. [Runbook operativo](#runbook-operativo)
-14. [Troubleshooting](#troubleshooting)
-15. [Decisiones de arquitectura (ADRs)](#decisiones-de-arquitectura-adrs)
-16. [Métricas de éxito](#métricas-de-éxito)
-17. [Riesgos y mitigaciones](#riesgos-y-mitigaciones)
+Premisa del proyecto en esta fase: **NO es un RAG**. Las tres tareas responden usando contexto consolidado inyectado en el prompt de sistema.
 
 ---
 
-## Qué hace el proyecto
+## 1. Objetivo
 
-El proyecto construye una **capa semántica** a partir de contenido público de la Fundación Valle del Lili. El flujo completo es:
+Este repositorio tiene dos piezas integradas:
 
-```
-Sitio web / YouTube / RSS
-         │
-         ▼
-   Extractores (crawl BFS, feeds)
-         │
-         ▼
-   Procesadores (limpieza + estructuración semántica)
-         │
-         ▼
-   Writers (Markdown con YAML frontmatter + ChromaDB)
-         │
-         ▼
-   knowledge/   ←  base de conocimiento lista para agentes
-   vectorstore/ ←  índice vectorial para búsqueda semántica
-```
+1. `semantic_layer_fvl`: capa semantica que extrae informacion publica y genera una base de conocimiento en Markdown.
+2. `app`: motor y frontend que consumen esa base de conocimiento con estrategia de context stuffing (sin retrieval vectorial) y exponen tres funcionalidades de LLM.
 
-**Entregables concretos:**
+Resultado esperado:
 
-- Base de conocimiento en Markdown estructurado (~50-100 documentos organizados por categoría)
-- Pipeline de extracción automatizado y reproducible
-- Búsqueda semántica con embeddings multilingüe (ChromaDB + `paraphrase-multilingual-MiniLM-L12-v2`)
-- API REST con FastAPI para consultar el knowledge base desde otros sistemas
-- Suite de pruebas offline completa
+- Salida limpia en `data/knowledge/` por dominios institucionales.
+- Dashboard con tres herramientas que responden usando solo contexto institucional consolidado:
+  - **Q&A conversacional**: chatbot con historial de turnos.
+  - **Resumen**: sintesis estructurada en Markdown de cualquier tema institucional.
+  - **FAQ**: entre 5 y 8 preguntas frecuentes con respuestas fundamentadas en los documentos.
 
 ---
 
-## Principios éticos y legales
-
-El proyecto opera exclusivamente sobre información pública y cumple los siguientes principios:
-
-| Principio | Implementación |
-|-----------|----------------|
-| Solo información pública | Extrae únicamente contenido accesible sin autenticación |
-| Respetar `robots.txt` | Verifica y cumple directivas del sitio antes de cada crawl |
-| Rate limiting | Máximo 0.5 requests/segundo (configurable) |
-| No datos sensibles | Cero información de pacientes o datos protegidos |
-| Atribución | Documenta fuente y fecha de extracción en cada documento |
-
-**Datos que el pipeline evita activamente:**
-
-- Información de pacientes
-- Datos de contacto personal de empleados no publicados
-- Documentos internos o confidenciales
-- Contenido detrás de login o autenticación
-
----
-
-## Arquitectura
-
-El sistema sigue principios de **bajo acoplamiento y alta cohesión**, con capas que se comunican mediante contratos Pydantic:
-
-```
-extractores  →  RawPage  →  procesadores  →  ProcessedDocument  →  writers
-```
-
-- **Extractores** producen `RawPage` a partir de web, YouTube o feeds RSS/Atom
-- **Procesadores** limpian el texto y estructuran la información semánticamente
-- **Writers** persisten `ProcessedDocument` como Markdown o en ChromaDB
-- **Orquestador** coordina las corridas, registra resúmenes y expone el CLI
-- **API REST** expone búsqueda y estadísticas del knowledge base sobre HTTP
-
-### Principios de diseño
-
-- **Bajo acoplamiento:** cada módulo es independiente y se comunica vía contratos Pydantic
-- **Alta cohesión:** cada módulo tiene una sola responsabilidad
-- **Contratos explícitos:** schemas Pydantic definen la estructura entre capas
-- **Configuración externa:** variables de entorno para URLs, modelos y directorios
-
----
-
-## Stack tecnológico
-
-### Extracción
-
-| Herramienta | Propósito |
-|-------------|-----------|
-| `httpx` | Cliente HTTP async con rate limiting |
-| `BeautifulSoup4` | Parser HTML para extracción estructurada |
-| `feedparser` | Lectura de feeds RSS y Atom |
-| `yt-dlp` | Metadata de YouTube sin API key |
-
-### Procesamiento y estructuración
-
-| Herramienta | Propósito |
-|-------------|-----------|
-| `Pydantic v2` | Contratos de datos y validación de schemas |
-| `pyyaml` | Manejo de metadatos YAML en frontmatter Markdown |
-
-### Búsqueda semántica
-
-| Herramienta | Propósito |
-|-------------|-----------|
-| `ChromaDB` | Base de datos vectorial persistente |
-| `sentence-transformers` | Modelo de embeddings multilingüe |
-| `paraphrase-multilingual-MiniLM-L12-v2` | Modelo concreto (~120 MB, descarga automática) |
-
-### API y CLI
-
-| Herramienta | Propósito |
-|-------------|-----------|
-| `FastAPI` | API REST con documentación interactiva automática |
-| `uvicorn` | Servidor ASGI para producción local |
-
-### Dev y testing
-
-| Herramienta | Propósito |
-|-------------|-----------|
-| `uv` | Gestión de dependencias y entornos virtuales |
-| `pytest` | Suite de pruebas offline |
-| `ruff` | Linter y formateador |
-
----
-
-## Estructura del proyecto
+## 2. Arquitectura End-to-End
 
 ```text
-plan_capa_semantica/
-├── .env.example                    ← Variables de entorno de referencia
-├── pyproject.toml                  ← Configuración UV y dependencias
+valledellili.org + sitemaps + feeds
+            |
+            v
+extractors (sitemap, crawler, feeds)
+            |
+            v
+RawPage (Pydantic)
+            |
+            v
+processors (cleaner + structurer)
+            |
+            v
+ProcessedDocument (Pydantic)
+            |
+            v
+writers (markdown + frontmatter)
+            |
+            v
+data/knowledge/<dominio>/<slug>.md
+            |
+            v
+app.engine -> contexto consolidado + compactacion
+            |
+            v
+LangChain + OpenAI (NO-RAG)
+   ┌────────┼────────────┐
+   v        v            v
+Q&A chain  Summary chain FAQ chain
+            |
+            v
+Streamlit dashboard (3 pestañas)
+```
+
+Capas principales:
+
+- `src/semantic_layer_fvl/extractors`: scraping y fuentes.
+- `src/semantic_layer_fvl/processors`: limpieza y estructuracion.
+- `src/semantic_layer_fvl/writers`: persistencia a Markdown.
+- `src/semantic_layer_fvl/orchestrator/pipeline.py`: coordinacion del flujo.
+- `src/app/engine.py`: motor del chatbot con contexto consolidado.
+- `src/app/main.py`: frontend Streamlit.
+
+---
+
+## 3. Dominios Configurados
+
+Definidos en `src/semantic_layer_fvl/domains.py`:
+
+- `servicios`
+- `especialistas`
+- `sedes`
+- `institucional`
+
+Cada dominio define:
+
+- sitemaps
+- patrones include/exclude de URL
+- selector principal de contenido
+- metadatos extra por selector
+- reglas de corte y limpieza de markdown
+
+---
+
+## 4. Flujo de Ejecucion
+
+Comando principal por dominio:
+
+```powershell
+uv run semantic-layer-fvl crawl-domain servicios --write
+```
+
+Secuencia:
+
+1. CLI parsea comando (`src/semantic_layer_fvl/cli.py`).
+2. `SemanticPipeline.run_domain()` obtiene URLs del sitemap.
+3. `WebCrawler.fetch_domain_page()` descarga HTML, limpia ruido y convierte a markdown.
+4. Estructuracion semantica (`structurer.py`) y armado de documento.
+5. Writer guarda `.md` y, opcionalmente, resumen de corrida.
+
+---
+
+## 5. Estrategia del Asistente (NO-RAG)
+
+Las tres funcionalidades **no usan vectorstore ni retrieval semantico** en esta fase.
+
+Flujo compartido:
+
+1. Carga recursiva de `.md` desde `KNOWLEDGE_DIR`.
+2. Consolidacion de todos los documentos en un solo contexto compactado.
+3. Inyeccion de ese contexto en el prompt de sistema de cada cadena.
+
+Las tres cadenas LangChain disponibles en `src/app/engine.py`:
+
+| Funcion | Cadena | Descripcion |
+|---|---|---|
+| `build_chain()` | Q&A | Chat multi-turno con `MessagesPlaceholder`. Temperatura 0.1. |
+| `build_summary_chain()` | Resumen | Genera sintesis estructurada en Markdown por tema. Temperatura 0.2. |
+| `build_faq_chain()` | FAQ | Genera 5-8 preguntas frecuentes con respuestas. Temperatura 0.2. |
+
+Funciones de invocacion:
+
+- `get_response(chain, context, question, history)` — Q&A con historial acotado.
+- `get_summary(chain, context, topic)` — Resumen de un tema.
+- `get_faq(chain, context, topic)` — FAQ sobre un tema.
+
+La carga de recursos usa `@st.cache_resource` para que el conocimiento y las tres cadenas se inicialicen una sola vez por sesion del servidor.
+
+---
+
+## 6. Optimizaciones de Costo de Inferencia (Implementadas)
+
+Para reducir tokens sin romper la premisa NO-RAG:
+
+1. **Scope correcto de conocimiento**
+- `KNOWLEDGE_DIR=data/knowledge`
+- Evita cargar todo `data/`.
+
+2. **Compactacion deterministica de contexto**
+- normaliza saltos de linea
+- reemplaza encabezados/frases repetitivas por abreviaturas
+- agrega compresion por lexico de lineas repetidas (`LEXICO_LINEAS`)
+
+3. **Historial con presupuesto**
+- limite por turnos
+- limite por caracteres totales
+- limite por mensaje
+
+4. **Presupuestos de salida por tarea**
+- `RESPONSE_MAX_TOKENS` para Q&A (default 500)
+- `SUMMARY_MAX_TOKENS` para Resumen (default 900)
+- `FAQ_MAX_TOKENS` para FAQ (default 1200)
+
+5. **Trazabilidad de contexto**
+- `data/debug_context_raw.txt` (consolidado original)
+- `data/debug_context.txt` (consolidado compacto)
+
+Variables de control (`.env`):
+
+- `RESPONSE_MAX_TOKENS` — tokens maximos en respuesta Q&A (default 500)
+- `SUMMARY_MAX_TOKENS` — tokens maximos en respuesta de Resumen (default 900)
+- `FAQ_MAX_TOKENS` — tokens maximos en respuesta de FAQ (default 1200)
+- `HISTORY_MAX_TURNS`
+- `HISTORY_MAX_CHARS`
+- `HISTORY_ITEM_MAX_CHARS`
+- `LINE_LEXICON_ENABLED`
+- `LINE_LEXICON_MIN_COUNT`
+- `LINE_LEXICON_MIN_LEN`
+- `LINE_LEXICON_MAX_ENTRIES`
+
+---
+
+## 7. Estructura del Proyecto
+
+```text
+.
+├── Makefile
+├── pyproject.toml
+├── .env.example
+├── data/
+│   ├── knowledge/
+│   ├── debug_context.txt
+│   └── debug_context_raw.txt
+├── reports/
+│   └── runs/
 ├── src/
-│   └── semantic_layer_fvl/
-│       ├── api/                    ← API REST (FastAPI)
-│       │   ├── app.py
-│       │   └── routes.py
-│       ├── cli.py                  ← Punto de entrada de todos los comandos
-│       ├── config/
-│       │   ├── settings.py         ← Configuración centralizada (pydantic-settings)
-│       │   └── logging.py          ← Logging estructurado
-│       ├── schemas/
-│       │   ├── documents.py        ← RawPage, ProcessedDocument, Chunk
-│       │   └── runs.py             ← RunSummary
-│       ├── extractors/
-│       │   ├── http_client.py      ← Cliente HTTP con rate limiting
-│       │   ├── robots.py           ← Parser y verificador de robots.txt
-│       │   ├── web_crawler.py      ← Crawler BFS con respeto a robots.txt
-│       │   ├── site_map.py         ← Mapa de URLs semilla
-│       │   ├── youtube.py          ← Extractor de feeds YouTube
-│       │   └── news.py             ← Extractor de feeds RSS/Atom
-│       ├── processors/
-│       │   ├── cleaner.py          ← Limpieza y normalización de texto
-│       │   ├── structurer.py       ← Clasificación y estructuración semántica
-│       │   └── chunker.py          ← División inteligente de documentos largos
-│       ├── writers/
-│       │   ├── base.py             ← Interfaz base de escritores
-│       │   ├── markdown_writer.py  ← Escribe Markdown con YAML frontmatter
-│       │   └── vectorstore_writer.py ← Indexa documentos en ChromaDB
-│       ├── vectorstore/
-│       │   ├── embeddings.py       ← Carga y gestión del modelo de embeddings
-│       │   └── store.py            ← Operaciones sobre ChromaDB
-│       └── orchestrator/
-│           └── pipeline.py         ← Orquestación de corridas y resúmenes
-├── knowledge/                      ← Documentos Markdown generados (output)
-├── vectorstore/                    ← Base de datos vectorial persistente (output)
-├── tests/                          ← Suite de pruebas
-└── docs/                           ← Documentación técnica
+│   ├── semantic_layer_fvl/
+│   │   ├── cli.py
+│   │   ├── domains.py
+│   │   ├── config/
+│   │   ├── extractors/
+│   │   ├── processors/
+│   │   ├── schemas/
+│   │   ├── writers/
+│   │   └── orchestrator/
+│   └── app/
+│       ├── engine.py
+│       └── main.py
+└── tests/
 ```
 
 ---
 
-## Configuración
+## 8. Requisitos
 
-### 1. Crear el archivo de variables de entorno
+- Python 3.11+
+- `uv` instalado
+- OpenAI API key para la app
 
-```bash
-cp .env.example .env
-```
+Opcional:
 
-### 2. Instalar dependencias
+- GNU make (en Windows puedes usar los comandos `uv run ...` directos)
 
-```bash
+---
+
+## 9. Configuracion
+
+### 9.1 Crear entorno local
+
+```powershell
 uv sync
 ```
 
-### 3. Validar configuración
+### 9.2 Configurar variables
 
-```bash
+```powershell
+Copy-Item .env.example .env
+```
+
+Editar `.env` y definir al menos:
+
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL`
+- `KNOWLEDGE_DIR=data/knowledge`
+
+### 9.3 Verificar CLI
+
+```powershell
 uv run semantic-layer-fvl show-config
 ```
 
-### Variables de entorno disponibles
+---
 
-| Variable | Default | Descripción |
-|----------|---------|-------------|
-| `LOG_LEVEL` | `INFO` | Nivel de logging (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
-| `OUTPUT_DIR` | `./knowledge` | Directorio de salida para documentos Markdown |
-| `RUNS_DIR` | `./runs` | Directorio para guardar resúmenes JSON de corridas |
-| `REQUESTS_PER_SECOND` | `0.5` | Rate limiting para crawl (req/seg) |
-| `REQUEST_TIMEOUT` | `30` | Timeout de requests en segundos |
-| `TARGET_BASE_URL` | `https://valledellili.org` | URL base del sitio objetivo |
-| `RESPECT_ROBOTS_TXT` | `true` | Activar/desactivar respeto a robots.txt |
-| `CHROMA_PERSIST_DIR` | `./vectorstore` | Directorio de persistencia de ChromaDB |
-| `EMBEDDING_MODEL` | `paraphrase-multilingual-MiniLM-L12-v2` | Modelo de embeddings |
-| `SEARCH_RESULTS_LIMIT` | `5` | Límite por defecto de resultados de búsqueda |
-| `YOUTUBE_SEARCH_LIMIT` | `50` | Límite de videos a extraer por feed YouTube |
-| `NEWS_FEED_LIMIT` | `100` | Límite de artículos a extraer por feed de noticias |
+## 10. Comandos Operativos
+
+### 10.1 Crawling por dominio
+
+```powershell
+uv run semantic-layer-fvl crawl-domain servicios --write
+uv run semantic-layer-fvl crawl-domain especialistas --write
+uv run semantic-layer-fvl crawl-domain sedes --write
+uv run semantic-layer-fvl crawl-domain institucional --write
+```
+
+Con limite:
+
+```powershell
+uv run semantic-layer-fvl crawl-domain servicios --write --max-urls 50
+```
+
+### 10.2 Otros comandos CLI
+
+```powershell
+uv run semantic-layer-fvl crawl-once https://valledellili.org/quienes-somos --write
+uv run semantic-layer-fvl crawl-seeds --limit 10 --write --save-summary
+uv run semantic-layer-fvl crawl-discover --max-pages 50 --write --save-summary
+uv run semantic-layer-fvl youtube-feed <feed_url> --write
+uv run semantic-layer-fvl news-feed <feed_url> --write
+```
+
+### 10.3 Dashboard Streamlit
+
+```powershell
+uv run streamlit run src/app/main.py
+```
+
+La aplicacion abre en `http://localhost:8501` con tres pestanas:
+
+- **💬 Q&A — Preguntas y Respuestas**: chat conversacional con boton para limpiar historial.
+- **📋 Resumen**: ingresa un tema y descarga la sintesis en `.md`.
+- **❓ FAQ**: ingresa un tema y descarga las preguntas frecuentes en `.md`.
+
+### 10.4 Atajos Makefile
+
+```powershell
+make servicios
+make especialistas
+make sedes
+make institucional
+make app
+```
 
 ---
 
-## Comandos CLI
+## 11. Replicar en Otro Equipo
 
-Todos los comandos se ejecutan con `uv run semantic-layer-fvl <comando>`.
+Esta seccion esta pensada para levantar el proyecto desde cero en una maquina nueva.
 
-### Diagnóstico
+### Paso 1. Clonar el repositorio
 
-```bash
-# Ver configuración actual cargada desde .env
+```powershell
+git clone <URL_DEL_REPO>
+cd Fundacion_Valle_Lili_V1
+```
+
+### Paso 2. Instalar dependencias
+
+```powershell
+uv sync
+```
+
+### Paso 3. Crear y ajustar `.env`
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Valores minimos recomendados:
+
+```dotenv
+OPENAI_API_KEY=<tu_api_key>
+OPENAI_MODEL=gpt-4o-mini
+KNOWLEDGE_DIR=data/knowledge
+RESPONSE_MAX_TOKENS=500
+SUMMARY_MAX_TOKENS=900
+FAQ_MAX_TOKENS=1200
+HISTORY_MAX_TURNS=6
+HISTORY_MAX_CHARS=3500
+HISTORY_ITEM_MAX_CHARS=700
+LINE_LEXICON_ENABLED=true
+LINE_LEXICON_MIN_COUNT=5
+LINE_LEXICON_MIN_LEN=24
+LINE_LEXICON_MAX_ENTRIES=350
+```
+
+### Paso 4. Verificar instalacion
+
+```powershell
 uv run semantic-layer-fvl show-config
-
-# Listar URLs semilla configuradas
-uv run semantic-layer-fvl list-seeds
+uv run pytest -q
 ```
 
-### Crawling web
+### Paso 5. Generar base de conocimiento
 
-```bash
-# Procesar una sola URL (útil para depurar extracción y clasificación)
-uv run semantic-layer-fvl crawl-once https://valledellili.org/nuestra-institucion
-
-# Procesar las URLs semilla configuradas
-uv run semantic-layer-fvl crawl-seeds --limit 5 --write --save-summary
-
-# Descubrimiento BFS: sigue enlaces internos a partir de las semillas
-uv run semantic-layer-fvl crawl-discover --max-pages 100 --write --save-summary
+```powershell
+uv run semantic-layer-fvl crawl-domain servicios --write
+uv run semantic-layer-fvl crawl-domain especialistas --write
+uv run semantic-layer-fvl crawl-domain sedes --write
+uv run semantic-layer-fvl crawl-domain institucional --write
 ```
 
-### Fuentes complementarias
+### Paso 6. Iniciar app
 
-```bash
-# Extraer feed de YouTube (canal o búsqueda)
-uv run semantic-layer-fvl youtube-feed https://www.youtube.com/feeds/videos.xml?channel_id=XXX
-
-# Extraer feed RSS o Atom de noticias
-uv run semantic-layer-fvl news-feed https://example.com/feed.xml
+```powershell
+uv run streamlit run src/app/main.py
 ```
 
-### Corrida compuesta (todas las fuentes)
+### Paso 7. Validar contexto cargado
 
-```bash
-uv run semantic-layer-fvl run-all \
-  --seed-limit 5 \
-  --youtube-feed https://www.youtube.com/feeds/videos.xml?channel_id=XXX \
-  --news-feed https://example.com/feed.xml \
-  --save-summary
-```
+Al iniciar la app, revisar que se generen:
 
-### Búsqueda semántica
+- `data/debug_context_raw.txt`
+- `data/debug_context.txt`
 
-```bash
-# Indexar todos los documentos del knowledge base
-uv run semantic-layer-fvl index-knowledge
+Puedes medir compactacion:
 
-# Buscar por significado (no por palabras exactas)
-uv run semantic-layer-fvl search "cardiología"
-uv run semantic-layer-fvl search "horarios de atención" --limit 10
-```
-
-### API REST
-
-```bash
-# Levantar el servidor en el puerto 8000
-uv run semantic-layer-fvl serve --port 8000
+```powershell
+uv run python -c "import pathlib; raw=pathlib.Path('data/debug_context_raw.txt').stat().st_size; comp=pathlib.Path('data/debug_context.txt').stat().st_size; print(round(((raw-comp)/raw)*100,2))"
 ```
 
 ---
 
-## API REST
+## 12. Testing
 
-Al ejecutar `serve`, la API queda disponible con documentación interactiva en `http://localhost:8000/docs`.
+Ejecutar toda la suite:
 
-| Endpoint | Método | Descripción |
-|----------|--------|-------------|
-| `/api/search?q=...&limit=5` | `GET` | Búsqueda semántica sobre el knowledge base |
-| `/api/stats` | `GET` | Estadísticas del knowledge base (documentos, chunks, categorías) |
-| `/api/index` | `POST` | Re-indexar todos los documentos del directorio `knowledge/` |
-
----
-
-## Búsqueda semántica
-
-El sistema usa **embeddings multilingüe** para buscar por significado, no por coincidencia de palabras exactas. Esto permite encontrar documentos relevantes aunque la consulta use vocabulario diferente al del documento.
-
-**Modelo:** `paraphrase-multilingual-MiniLM-L12-v2` (~120 MB, se descarga automáticamente la primera vez).
-
-**Flujo de indexación:**
-
-1. Lee todos los archivos `.md` del directorio `knowledge/`
-2. Aplica **chunking inteligente** para dividir documentos largos en fragmentos con solapamiento
-3. Genera embeddings de cada chunk con el modelo de sentence-transformers
-4. Persiste los vectores en ChromaDB (directorio `vectorstore/`)
-
-**Flujo de búsqueda:**
-
-1. Genera el embedding de la consulta
-2. Busca los chunks más cercanos en el espacio vectorial
-3. Retorna resultados ordenados por distancia coseno (menor = más relevante)
-
----
-
-## Taxonomía del knowledge base
-
-Los documentos Markdown generados se organizan automáticamente en categorías:
-
-| Carpeta | Contenido | Prioridad |
-|---------|-----------|-----------|
-| `01_organizacion/` | Historia, misión, visión, certificaciones | Alta |
-| `02_servicios/` | Especialidades médicas, programas | Alta |
-| `03_talento_humano/` | Directivos, especialistas | Alta |
-| `04_sedes_ubicaciones/` | Sede principal, centros médicos | Alta |
-| `05_contacto/` | Canales de atención, horarios | Alta |
-| `06_normatividad/` | Derechos de pacientes, políticas | Media |
-| `07_investigacion/` | Centro de investigaciones | Media |
-| `08_educacion/` | Programas de formación | Media |
-| `09_noticias/` | Noticias institucionales | Media |
-| `10_multimedia/` | YouTube, redes sociales | Media |
-
-Cada documento incluye YAML frontmatter con metadatos:
-
-```yaml
----
-title: "Nombre del documento"
-category: "02_servicios"
-source: "https://valledellili.org/servicios"
-extracted_at: "2026-04-18T10:00:00"
----
-```
-
----
-
-## Fuentes de datos
-
-### Sitio web principal (`valledellili.org`)
-
-| URL | Contenido | Prioridad |
-|-----|-----------|-----------|
-| `/` | Página principal, overview | Alta |
-| `/quienes-somos` | Historia, misión, visión | Alta |
-| `/servicios` | Lista de servicios médicos | Alta |
-| `/especialidades` | Especialidades médicas | Alta |
-| `/directorio-medico` | Información de especialistas | Alta |
-| `/sedes` | Ubicaciones y contacto | Alta |
-| `/normatividad` | Políticas, derechos pacientes | Media |
-| `/investigacion` | Centro de investigaciones | Media |
-| `/noticias` | Noticias institucionales | Media |
-
-### Fuentes complementarias
-
-- **YouTube:** Feed público del canal institucional de la Fundación Valle del Lili
-- **Noticias:** Feeds RSS de El País (Cali), El Tiempo, Google News, Portafolio
-
----
-
-## Testing
-
-### Ejecutar la suite
-
-```bash
+```powershell
 uv run pytest
 ```
 
-O con el ejecutable del entorno virtual directamente:
+La suite es offline y cubre, entre otros:
 
-```powershell
-& .\.venv\Scripts\python.exe -m pytest
-```
-
-### Cobertura actual
-
-La suite cubre:
-
-- Configuración y settings
-- Contratos Pydantic (schemas)
-- Rate limiting y cliente HTTP
-- Reglas de `robots.txt`
-- Mapeo de semillas
-- Crawler web base
-- Limpieza, estructuración y escritura Markdown
-- Extractores de YouTube y noticias
-- Ejecución del pipeline y resúmenes de corrida
-- Despacho básico del CLI
-
-### Criterios de testing
-
-- Las pruebas deben ser **offline** — sin dependencias de red en tiempo de test
-- Las integraciones externas se simulan con `httpx.MockTransport` o stubs
-- Los tests evitan dependencias de directorios temporales del sistema
-
-### Próximas mejoras recomendadas
-
-- Agregar pruebas de integración con ejemplos reales de HTML y feeds guardados como fixtures
-- Validar el formato del frontmatter generado contra un parser YAML
+- settings/config
+- schemas Pydantic
+- crawler y reglas de limpieza
+- pipeline
+- CLI
 
 ---
 
-## Runbook operativo
+## 13. Troubleshooting Rapido
 
-### Preparación inicial
+1. `program not found: semantic-layer-fvl`
+- Ejecuta `uv sync`.
+- Usa `uv run semantic-layer-fvl ...` dentro de la raiz del repo.
 
-1. Crear `.env` a partir de `.env.example`
-2. Instalar dependencias: `uv sync`
-3. Validar configuración: `uv run semantic-layer-fvl show-config`
+2. La app responde lento o caro en tokens
+- Baja `RESPONSE_MAX_TOKENS` (Q&A), `SUMMARY_MAX_TOKENS` (Resumen) o `FAQ_MAX_TOKENS` (FAQ).
+- Ajusta `HISTORY_MAX_*` para reducir tokens del historial en Q&A.
+- Mantiene `KNOWLEDGE_DIR=data/knowledge`.
 
-### Flujo típico de extracción
+3. Error por API key
+- Verifica `OPENAI_API_KEY` en `.env`.
+- Reinicia proceso de Streamlit despues de cambiar variables.
 
-```bash
-# 1. Probar con una sola URL para validar extracción
-uv run semantic-layer-fvl crawl-once https://valledellili.org/quienes-somos
-
-# 2. Extraer URLs semilla
-uv run semantic-layer-fvl crawl-seeds --limit 5 --write --save-summary
-
-# 3. Descubrimiento BFS para mayor cobertura
-uv run semantic-layer-fvl crawl-discover --max-pages 50 --write --save-summary
-
-# 4. Indexar el knowledge base para búsqueda semántica
-uv run semantic-layer-fvl index-knowledge
-
-# 5. Verificar con una búsqueda de prueba
-uv run semantic-layer-fvl search "cardiología" --limit 5
-```
-
-### Artefactos de salida
-
-- `knowledge/`: documentos Markdown organizados por categoría
-- `runs/`: resúmenes JSON de las corridas cuando se usa `--save-summary`
-- `vectorstore/`: base de datos vectorial persistente de ChromaDB
-
-### Lectura del resumen de corrida
-
-Los comandos por lote imprimen un resumen con:
-
-- `processed`: cantidad total de items intentados
-- `success`: cantidad de items procesados correctamente
-- `failure`: cantidad de items que fallaron
-
-Cuando hay errores, cada item fallido incluye el `source`, el `input` y el mensaje de error.
+4. No aparecen documentos en salida
+- Ejecuta `crawl-domain ... --write`.
+- Verifica permisos de escritura en `data/knowledge`.
 
 ---
 
-## Troubleshooting
+## 14. Seguridad y Buenas Practicas
 
-### `uv sync` falla por permisos de caché
-
-**Síntoma:**
-```text
-Failed to initialize cache at C:\Users\USER\AppData\Local\uv\cache
-```
-
-**Acciones:**
-- Ejecutar `uv sync` con permisos suficientes en el entorno local
-- Revisar políticas de acceso al caché de `uv`
+- No subir `.env` al repositorio.
+- No exponer llaves API en capturas o logs.
+- Mantener scraping solo sobre contenido publico institucional.
 
 ---
 
-### `pytest` falla al crear temporales de Windows
+## 15. Estado del Modulo
 
-**Síntoma:**
-```text
-PermissionError: ... AppData\Local\Temp\pytest-of-USER
-```
+Estado actual: funcional para construccion de base semantica + dashboard NO-RAG con tres funcionalidades LLM (Q&A, Resumen, FAQ) y optimizaciones de costo de inferencia.
 
-**Estado:** la suite del repo ya evita depender del directorio temporal por defecto. Si vuelve a aparecer, revisar si algún test nuevo usa temporales del sistema.
-
----
-
-### Escritura de archivos bloqueada desde Python
-
-**Síntoma:**
-```text
-PermissionError: [Errno 13] Permission denied
-```
-
-**Acciones:**
-- Validar que `OUTPUT_DIR` y `RUNS_DIR` apunten a rutas con permisos de escritura
-- Probar primero sin `--write` para aislar extracción de persistencia
-
----
-
-### `robots.txt` responde `403` u otro `4xx`
-
-El crawler trata los `4xx` (distinto de `429`) como "no disponible" y continúa. Si responde `429` o `5xx`, el crawler adopta un comportamiento restrictivo y bloquea la extracción.
-
-**Si el crawl aún falla:**
-- Revisar si la página objetivo también devuelve `403`
-- Revisar el `User-Agent` configurado
-- Validar si el sitio usa WAF o protecciones anti-bot
-
----
-
-### Un feed no produce documentos
-
-**Checklist:**
-- Confirmar que el feed sea RSS o Atom válido
-- Revisar que tenga `title` y `link` por item
-- Verificar los límites `YOUTUBE_SEARCH_LIMIT` o `NEWS_FEED_LIMIT` en `.env`
-
----
-
-## Decisiones de arquitectura (ADRs)
-
-### ADR-001: Pipeline modular y contratos explícitos
-
-**Estado:** Aprobado
-
-**Contexto:** El proyecto necesita combinar varias fuentes de información y transformarlas a un formato Markdown consistente sin acoplar cada extractor a la salida final.
-
-**Decisión:** Se adopta una arquitectura modular con capas separadas: extractores → procesadores → writers → orquestador. Los contratos entre capas se modelan con Pydantic.
-
-**Consecuencias:**
-- ✅ Facilita pruebas offline
-- ✅ Permite agregar nuevas fuentes sin reescribir el pipeline
-- ✅ Mantiene separación clara de responsabilidades
-- ⚠️ Más clases y modelos que en un script lineal
-- ⚠️ Algunas transformaciones requieren mapeos intermedios adicionales
-
----
-
-### ADR-002: Fuentes públicas primero y respeto por `robots.txt`
-
-**Estado:** Aprobado
-
-**Contexto:** La capa semántica se alimenta de información institucional y debe respetar restricciones éticas y operativas del sitio objetivo.
-
-**Decisión:** Se priorizan fuentes públicas y accesibles sin autenticación. Para extracción web: se consulta `robots.txt`, se aplica rate limiting y se evita acceso a datos sensibles. Para fuentes complementarias: se prefieren feeds públicos antes que integraciones con claves o scraping ad hoc.
-
-**Consecuencias:**
-- ✅ Menor riesgo legal y operativo
-- ✅ Mejor trazabilidad de origen
-- ✅ Pruebas más simples y repetibles
-- ⚠️ Algunas fuentes pueden ofrecer menos detalle que una integración propietaria
-- ⚠️ El proyecto depende de la estabilidad de los feeds y el contenido público
-
----
-
-## Métricas de éxito
-
-| Métrica | Objetivo | Cómo medir |
-|---------|----------|------------|
-| Cobertura de contenido | >80% secciones del sitio | Checklist de URLs |
-| Calidad del Markdown | Formato consistente | Validación automática |
-| Rate limiting | 0 errores 429 | Logs del extractor |
-| Tiempo de extracción | <30 min sitio completo | Métricas del pipeline |
-| Tests passing | 100% | `pytest` en CI |
-| Documentación | README + ADRs completos | Revisión manual |
-
----
-
-## Riesgos y mitigaciones
-
-| Riesgo | Probabilidad | Impacto | Mitigación |
-|--------|-------------|---------|------------|
-| El sitio bloquea scraping | Media | Alto | Respetar `robots.txt`, rate limiting |
-| Estructura HTML cambia | Alta | Medio | Selectores genéricos, logging detallado |
-| Contenido dinámico JS | Media | Medio | Parseo HTML directo con fallbacks |
-| Datos incompletos | Media | Medio | Validación con schemas Pydantic |
-| Dependencias rotas | Baja | Alto | Lockfile `uv.lock`, versiones pinneadas |
-
----
-
-## Gestión del proyecto (Issues/Milestones)
-
-Para repartir el trabajo del equipo y llevar el avance por milestones:
-- Backlog sugerido: `docs/milestones_backlog.md`
-- Flujo de ramas (ramas personales → `Development` → `main`): `docs/workflow_git.md`
-- Documentación base: `docs/fuentes.md`, `docs/alcance.md`, `docs/informe.md`
-- Pruebas de Q&A (20 preguntas): `tests/qa_questions.md`, `tests/qa_results.csv`
-
-Realizado por: Jhonatan, Nicolas, Mateo y Jorge
-*Versión: 1.0 — Abril 2026*
+Siguiente paso natural (si el curso lo permite): evolucionar a recuperacion selectiva por documentos/chunks (RAG) — el modulo `TextChunker` en `processors/chunker.py` ya esta implementado y reservado para esa fase.

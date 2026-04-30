@@ -1,10 +1,11 @@
+"""Submódulo de esquemas: expone todos los modelos Pydantic del dominio."""
+
 from semantic_layer_fvl.schemas.documents import (
     DocumentCategory,
     ExtractionMetadata,
     ProcessedDocument,
     PublicationStatus,
     RawPage,
-    SearchResult,
     SourceDocument,
     UrlRecord,
 )
@@ -18,7 +19,6 @@ __all__ = [
     "ProcessedDocument",
     "PublicationStatus",
     "RawPage",
-    "SearchResult",
     "SourceDocument",
     "UrlRecord",
 ]

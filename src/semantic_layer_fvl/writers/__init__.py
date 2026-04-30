@@ -1,4 +1,5 @@
-from semantic_layer_fvl.writers.markdown_writer import MarkdownWriter
-from semantic_layer_fvl.writers.vectorstore_writer import VectorStoreWriter
+"""Submódulo de escritores: expone ``MarkdownWriter`` para generar archivos de salida."""
 
-__all__ = ["MarkdownWriter", "VectorStoreWriter"]
+from semantic_layer_fvl.writers.markdown_writer import MarkdownWriter
+
+__all__ = ["MarkdownWriter"]

@@ -1,13 +1,15 @@
+"""División de texto en fragmentos solapados para búsqueda semántica (reservado para v2.0)."""
+
 from __future__ import annotations
 
 import re
 
 
 class TextChunker:
-    """Split text into overlapping chunks for more precise semantic search.
+    """Divide texto en fragmentos solapados para búsqueda semántica más precisa.
 
-    Each chunk preserves paragraph boundaries where possible and includes
-    metadata about its position within the original document.
+    Cada fragmento preserva los límites de párrafo en la medida de lo posible.
+    Reservado para la versión 2.0 del proyecto.
     """
 
     def __init__(
@@ -16,12 +18,19 @@ class TextChunker:
         chunk_overlap: int = 50,
         min_chunk_size: int = 100,
     ) -> None:
+        """Inicializa el chunker con los parámetros de tamaño y solapamiento.
+
+        Args:
+            max_chunk_size: Tamaño máximo de cada fragmento en caracteres.
+            chunk_overlap: Número de caracteres de solapamiento entre fragmentos consecutivos.
+            min_chunk_size: Tamaño mínimo para que un fragmento sea emitido de forma independiente.
+        """
         self.max_chunk_size = max_chunk_size
         self.chunk_overlap = chunk_overlap
         self.min_chunk_size = min_chunk_size
 
     def chunk(self, text: str) -> list[str]:
-        """Split text into overlapping chunks respecting paragraph boundaries."""
+        """Divide el texto en fragmentos solapados respetando los límites de párrafo."""
         if not text or not text.strip():
             return []
 
@@ -38,12 +47,12 @@ class TextChunker:
         return self._merge_paragraphs_into_chunks(paragraphs)
 
     def _split_paragraphs(self, text: str) -> list[str]:
-        """Split text into clean paragraphs."""
+        """Divide el texto en párrafos limpios separados por líneas en blanco."""
         raw_paragraphs = re.split(r"\n{2,}", text.strip())
         return [p.strip() for p in raw_paragraphs if p.strip()]
 
     def _merge_paragraphs_into_chunks(self, paragraphs: list[str]) -> list[str]:
-        """Merge paragraphs into chunks of max_chunk_size with overlap."""
+        """Combina párrafos en fragmentos de ``max_chunk_size`` con solapamiento."""
         chunks: list[str] = []
         current_parts: list[str] = []
         current_length = 0
@@ -88,7 +97,7 @@ class TextChunker:
         return chunks
 
     def _get_overlap_parts(self, parts: list[str]) -> list[str]:
-        """Return trailing paragraphs that fit within the overlap window."""
+        """Devuelve los párrafos finales que caben dentro de la ventana de solapamiento."""
         if self.chunk_overlap <= 0:
             return []
 
@@ -102,7 +111,7 @@ class TextChunker:
         return overlap_parts
 
     def _split_long_paragraph(self, paragraph: str) -> list[str]:
-        """Split an oversized paragraph by sentence boundaries."""
+        """Divide un párrafo demasiado largo en fragmentos por límites de oración."""
         sentences = re.split(r"(?<=[.!?])\s+", paragraph)
         chunks: list[str] = []
         current = ""

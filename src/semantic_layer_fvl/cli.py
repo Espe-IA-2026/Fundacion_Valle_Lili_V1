@@ -1,3 +1,5 @@
+"""Interfaz de linea de comandos para semantic_layer_fvl."""
+
 from __future__ import annotations
 
 import argparse
@@ -8,6 +10,8 @@ from semantic_layer_fvl.orchestrator import SemanticPipeline
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Construye y devuelve el analizador de argumentos."""
+
     parser = argparse.ArgumentParser(
         prog="semantic-layer-fvl",
         description="Herramientas base del proyecto de capa semantica.",
@@ -24,7 +28,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     crawl_once_parser = subparsers.add_parser(
         "crawl-once",
-        help="Extrae una URL, la procesa y opcionalmente la escribe como Markdown.",
+        help=(
+            "Extrae una URL, la procesa y opcionalmente la escribe como " "Markdown."
+        ),
     )
     crawl_once_parser.add_argument("url", help="URL publica a procesar.")
     crawl_once_parser.add_argument(
@@ -74,7 +80,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     crawl_discover_parser = subparsers.add_parser(
         "crawl-discover",
-        help="Rastrea el sitio descubriendo nuevos enlaces desde las semillas (BFS).",
+        help=(
+            "Rastrea el sitio descubriendo nuevos enlaces desde las " "semillas (BFS)."
+        ),
     )
     crawl_discover_parser.add_argument(
         "--max-pages",
@@ -94,7 +102,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run_all_parser = subparsers.add_parser(
         "run-all",
-        help="Ejecuta una corrida compuesta con semillas, feeds de YouTube y feeds de noticias.",
+        help=(
+            "Ejecuta una corrida compuesta con semillas, feeds de YouTube "
+            "y feeds de noticias."
+        ),
     )
     run_all_parser.add_argument(
         "--seed-limit",
@@ -124,40 +135,37 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Guarda el resumen de corrida en el directorio de runs.",
     )
-    subparsers.add_parser(
-        "index-knowledge",
-        help="Indexa los archivos Markdown existentes en knowledge/ al vector store.",
+    crawl_domain_parser = subparsers.add_parser(
+        "crawl-domain",
+        help="Crawlea un dominio especifico usando su sitemap XML.",
     )
-    search_parser = subparsers.add_parser(
-        "search",
-        help="Busqueda semantica sobre el knowledge indexado.",
+    crawl_domain_parser.add_argument(
+        "domain",
+        choices=["servicios", "especialistas", "sedes", "institucional"],
+        help="Dominio a procesar.",
     )
-    search_parser.add_argument("query", help="Texto de busqueda.")
-    search_parser.add_argument(
-        "--limit",
+    crawl_domain_parser.add_argument(
+        "--max-urls",
         type=int,
-        default=None,
-        help="Cantidad maxima de resultados.",
+        default=300,
+        help="Limite de URLs a procesar (default: 300).",
     )
-    serve_parser = subparsers.add_parser(
-        "serve",
-        help="Inicia el servidor API REST.",
+    crawl_domain_parser.add_argument(
+        "--write",
+        action="store_true",
+        help="Escribe los documentos .md en el directorio de salida.",
     )
-    serve_parser.add_argument(
-        "--host",
-        default="0.0.0.0",
-        help="Host del servidor (default: 0.0.0.0).",
-    )
-    serve_parser.add_argument(
-        "--port",
-        type=int,
-        default=8000,
-        help="Puerto del servidor (default: 8000).",
+    crawl_domain_parser.add_argument(
+        "--save-summary",
+        action="store_true",
+        help="Guarda el resumen de corrida en el directorio de runs.",
     )
     return parser
 
 
 def handle_show_config() -> int:
+    """Muestra la configuracion cargada desde variables de entorno."""
+
     settings = get_settings()
     print(f"project_name={settings.project_name}")
     print(f"target_base_url={settings.target_base_url}")
@@ -168,27 +176,33 @@ def handle_show_config() -> int:
 
 
 def handle_list_seeds() -> int:
+    """Lista las URLs semilla configuradas para el sitio objetivo."""
+
     settings = get_settings()
-    for record in build_seed_urls(settings.target_base_url):
+    for record in build_seed_urls(str(settings.target_base_url)):
         category = record.category.value if record.category else "sin_categoria"
         print(f"{record.priority:03d} {category} {record.url}")
     return 0
 
 
 def handle_crawl_once(url: str, *, write: bool) -> int:
+    """Procesa una URL publica y opcionalmente escribe Markdown."""
+
     pipeline = SemanticPipeline()
     processed, output_path = pipeline.process_url(url, write=write)
 
     print(f'title="{processed.document.title}"')
     print(f'category="{processed.document.category.value}"')
     print(f'slug="{processed.document.slug}"')
-    print(f'headings={len(processed.headings)}')
+    print(f"headings={len(processed.headings)}")
     if output_path is not None:
         print(f'output_path="{output_path}"')
     return 0
 
 
 def handle_youtube_feed(feed_url: str, *, write: bool) -> int:
+    """Procesa un feed Atom publico de YouTube."""
+
     pipeline = SemanticPipeline()
     results = pipeline.process_youtube_feed(feed_url, write=write)
 
@@ -201,6 +215,8 @@ def handle_youtube_feed(feed_url: str, *, write: bool) -> int:
 
 
 def handle_news_feed(feed_url: str, *, write: bool) -> int:
+    """Procesa un feed RSS o Atom de noticias."""
+
     pipeline = SemanticPipeline()
     results = pipeline.process_news_feed(feed_url, write=write)
 
@@ -213,6 +229,8 @@ def handle_news_feed(feed_url: str, *, write: bool) -> int:
 
 
 def print_summary(summary, *, summary_path: str | None = None) -> None:
+    """Imprime un resumen compacto de una corrida."""
+
     print(f"processed={summary.processed_count}")
     print(f"success={summary.success_count}")
     print(f"failure={summary.failure_count}")
@@ -221,7 +239,9 @@ def print_summary(summary, *, summary_path: str | None = None) -> None:
 
     for result in summary.results[:5]:
         status = "ok" if result.success else "error"
-        line = f'{status} source="{result.source_type}" input="{result.input_reference}"'
+        line = (
+            f'{status} source="{result.source_type}" input="{result.input_reference}"'
+        )
         if result.title:
             line += f' title="{result.title}"'
         if result.output_path:
@@ -231,7 +251,26 @@ def print_summary(summary, *, summary_path: str | None = None) -> None:
         print(line)
 
 
+def handle_crawl_domain(
+    *,
+    domain: str,
+    max_urls: int,
+    write: bool,
+    save_summary: bool,
+) -> int:
+    """Crawlea un dominio especifico usando su sitemap XML."""
+
+    pipeline = SemanticPipeline()
+    summary = pipeline.run_domain(domain_name=domain, max_urls=max_urls, write=write)
+    summary_path = str(pipeline.save_summary(summary)) if save_summary else None
+    print(f"domain={domain}")
+    print_summary(summary, summary_path=summary_path)
+    return 0 if summary.failure_count == 0 else 1
+
+
 def handle_crawl_discover(*, max_pages: int, write: bool, save_summary: bool) -> int:
+    """Rastrea el sitio descubriendo nuevos enlaces desde semillas."""
+
     pipeline = SemanticPipeline()
     summary = pipeline.run_with_discovery(max_pages=max_pages, write=write)
     summary_path = str(pipeline.save_summary(summary)) if save_summary else None
@@ -240,6 +279,8 @@ def handle_crawl_discover(*, max_pages: int, write: bool, save_summary: bool) ->
 
 
 def handle_crawl_seeds(*, limit: int | None, write: bool, save_summary: bool) -> int:
+    """Procesa las URLs semilla configuradas para el sitio objetivo."""
+
     pipeline = SemanticPipeline()
     summary = pipeline.run_seed_urls(limit=limit, write=write)
     summary_path = str(pipeline.save_summary(summary)) if save_summary else None
@@ -255,6 +296,8 @@ def handle_run_all(
     write: bool,
     save_summary: bool,
 ) -> int:
+    """Ejecuta una corrida compuesta con semillas y feeds."""
+
     pipeline = SemanticPipeline()
     summary = pipeline.run_all(
         seed_limit=seed_limit,
@@ -267,37 +310,9 @@ def handle_run_all(
     return 0 if summary.failure_count == 0 else 1
 
 
-def handle_index_knowledge() -> int:
-    pipeline = SemanticPipeline()
-    count = pipeline.index_knowledge_dir()
-    print(f"indexed={count}")
-    return 0
-
-
-def handle_search(query: str, *, limit: int | None) -> int:
-    pipeline = SemanticPipeline()
-    results = pipeline.search(query, n_results=limit)
-    print(f"results={len(results)}")
-    for result in results:
-        print(f'  [{result.distance:.4f}] "{result.title}" ({result.category})')
-        snippet = result.content_snippet.replace("\n", " ")[:120]
-        print(f"    {snippet}")
-    return 0
-
-
-def handle_serve(*, host: str, port: int) -> int:
-    import uvicorn
-
-    from semantic_layer_fvl.api import create_app
-
-    app = create_app()
-    print(f"Starting API server on http://{host}:{port}")
-    print(f"  Docs: http://{host}:{port}/docs")
-    uvicorn.run(app, host=host, port=port)
-    return 0
-
-
 def main() -> int:
+    """Punto de entrada de la CLI."""
+
     parser = build_parser()
     args = parser.parse_args()
     configure_logging()
@@ -312,6 +327,13 @@ def main() -> int:
         return handle_youtube_feed(args.feed_url, write=args.write)
     if args.command == "news-feed":
         return handle_news_feed(args.feed_url, write=args.write)
+    if args.command == "crawl-domain":
+        return handle_crawl_domain(
+            domain=args.domain,
+            max_urls=args.max_urls,
+            write=args.write,
+            save_summary=args.save_summary,
+        )
     if args.command == "crawl-discover":
         return handle_crawl_discover(
             max_pages=args.max_pages,
@@ -332,13 +354,6 @@ def main() -> int:
             write=args.write,
             save_summary=args.save_summary,
         )
-    if args.command == "index-knowledge":
-        return handle_index_knowledge()
-    if args.command == "search":
-        return handle_search(args.query, limit=args.limit)
-    if args.command == "serve":
-        return handle_serve(host=args.host, port=args.port)
-
     parser.print_help()
     return 1
 
