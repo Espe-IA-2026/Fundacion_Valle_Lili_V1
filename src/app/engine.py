@@ -13,6 +13,7 @@ prompt del sistema para garantizar respuestas fundamentadas (grounded) sin aluci
 import os
 import re
 from collections import Counter
+from collections.abc import Iterator
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -369,6 +370,32 @@ def get_response(
         Respuesta generada por el modelo como cadena de texto.
     """
     return chain.invoke(
+        {
+            "context": context,
+            "history_messages": _history_to_messages(history),
+            "question": question,
+        }
+    )
+
+
+def stream_response(
+    chain: Runnable, context: str, question: str, history: list[dict]
+) -> Iterator[str]:
+    """Genera la respuesta token a token para renderizado en streaming en la UI.
+
+    Usa ``chain.stream()`` de LCEL para que el front-end pueda mostrar cada chunk
+    a medida que llega del modelo, en lugar de esperar la respuesta completa.
+
+    Args:
+        chain: Cadena LangChain construida por ``build_chain()``.
+        context: Contexto compactado del knowledge base.
+        question: Pregunta del usuario en el turno actual.
+        history: Lista de mensajes previos con formato ``[{"role": ..., "content": ...}]``.
+
+    Yields:
+        Fragmentos de texto (chunks) de la respuesta del modelo.
+    """
+    yield from chain.stream(
         {
             "context": context,
             "history_messages": _history_to_messages(history),
