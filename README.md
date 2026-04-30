@@ -127,7 +127,8 @@ Las tres cadenas LangChain disponibles en `src/app/engine.py`:
 
 Funciones de invocacion:
 
-- `get_response(chain, context, question, history)` — Q&A con historial acotado.
+- `get_response(chain, context, question, history)` — Q&A bloqueante (resultado completo).
+- `stream_response(chain, context, question, history)` — Q&A en streaming; devuelve un generador de chunks que `st.write_stream()` consume token a token.
 - `get_summary(chain, context, topic)` — Resumen de un tema.
 - `get_faq(chain, context, topic)` — FAQ sobre un tema.
 
@@ -281,11 +282,18 @@ uv run semantic-layer-fvl news-feed <feed_url> --write
 uv run streamlit run src/app/main.py
 ```
 
-La aplicacion abre en `http://localhost:8501` con tres pestanas:
+La aplicacion abre en `http://localhost:8501` con layout wide y sidebar lateral.
 
-- **💬 Q&A — Preguntas y Respuestas**: chat conversacional con boton para limpiar historial.
-- **📋 Resumen**: ingresa un tema y descarga la sintesis en `.md`.
-- **❓ FAQ**: ingresa un tema y descarga las preguntas frecuentes en `.md`.
+**Sidebar**
+- Branding de la FVL, estado de carga del knowledge base, guia de uso y modelo activo.
+
+**Pestanas**
+
+- **💬 Q&A — Preguntas y Respuestas**: respuestas en streaming token a token via `chain.stream()`. Incluye panel de bienvenida con 5 preguntas de ejemplo clicables y boton para limpiar historial.
+- **📋 Resumen**: expander de temas sugeridos, formulario de tema libre, resultado con banner de identificacion y descarga en `.md`.
+- **❓ FAQ**: misma estructura que Resumen; genera 5-8 preguntas con respuestas fundamentadas en documentos.
+
+El CSS profesional aplica una paleta hospitalaria (azul `#002D72` / teal `#0077B5`) a tabs, botones, inputs y mensajes de chat.
 
 ### 10.4 Atajos Makefile
 
