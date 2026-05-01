@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 from semantic_layer_fvl.schemas import (
     DocumentCategory,
@@ -198,10 +198,38 @@ class SemanticStructurer:
 
     @staticmethod
     def _resolve_slug(raw_page: RawPage, title: str) -> str:
-        """Genera el slug del documento a partir de la ruta de la URL o del título."""
-        path = urlsplit(str(raw_page.url)).path.strip("/")
+        """Genera el slug del documento priorizando identificadores externos.
+
+        Orden de prioridad:
+            1. ``extra_metadata.video_id`` o ``external_id`` (e.g., YouTube, GUID feed).
+            2. Para URLs de YouTube, el query param ``v=...``.
+            3. Último segmento del path de la URL (excluye genéricos como ``watch``).
+            4. Slug derivado del título.
+        """
+        # 1) Identificador externo en extra_metadata
+        for key in ("video_id", "external_id"):
+            ext_id = raw_page.extra_metadata.get(key) if raw_page.extra_metadata else None
+            if ext_id:
+                return slugify(str(ext_id))
+
+        parts = urlsplit(str(raw_page.url))
+
+        # 2) Query param `v` en URLs de YouTube
+        if "youtube.com" in parts.netloc or "youtu.be" in parts.netloc:
+            video_param = parse_qs(parts.query).get("v", [None])[0]
+            if video_param:
+                return slugify(video_param)
+
+        # 3) Último segmento del path (excluyendo genéricos)
+        _GENERIC_SEGMENTS = {"watch", "rss", "feed", "index", "articles"}
+        path = parts.path.strip("/")
         if path:
-            return slugify(path.rsplit("/", 1)[-1])
+            last_segment = path.rsplit("/", 1)[-1]
+            slug_candidate = slugify(last_segment)
+            if slug_candidate and slug_candidate not in _GENERIC_SEGMENTS:
+                return slug_candidate
+
+        # 4) Fallback al título
         return slugify(title)
 
     @staticmethod
