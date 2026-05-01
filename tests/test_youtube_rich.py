@@ -14,12 +14,17 @@ _SAMPLE_INFO: dict = {
     "id": "testvideoid",
     "title": "Trasplante de corazón en la FVL",
     "channel": "Fundación Valle del Lili",
+    "channel_url": "https://www.youtube.com/@fundacionvallelili",
     "description": "Descripción del procedimiento.\nSiguenos en Instagram @fvl_oficial",
     "upload_date": "20240315",
     "duration": 375,
     "webpage_url": "https://www.youtube.com/watch?v=testvideoid",
     "subtitles": {},
     "automatic_captions": {},
+    "view_count": 12345,
+    "like_count": 678,
+    "tags": ["medicina", "cardiología", "FVL", "trasplantes"],
+    "categories": ["Education"],
 }
 
 
@@ -129,3 +134,49 @@ def test_parse_vtt_strips_timestamps() -> None:
     assert "Esto es una prueba" in result
     assert "00:00:01" not in result
     assert "WEBVTT" not in result
+
+
+def test_view_count_and_likes_in_text_content() -> None:
+    extractor = _make_extractor()
+
+    mock_ydl = MagicMock()
+    mock_ydl.__enter__ = MagicMock(return_value=mock_ydl)
+    mock_ydl.__exit__ = MagicMock(return_value=False)
+    mock_ydl.extract_info = MagicMock(return_value=_SAMPLE_INFO)
+
+    with patch("yt_dlp.YoutubeDL", return_value=mock_ydl):
+        raw_page = extractor.fetch_video("https://www.youtube.com/watch?v=testvideoid")
+
+    content = raw_page.text_content or ""
+    assert "12,345" in content
+    assert "678" in content
+    assert "Etiquetas:" in content
+    assert "cardiología" in content
+
+
+def test_extra_metadata_includes_enriched_fields() -> None:
+    extractor = _make_extractor()
+
+    mock_ydl = MagicMock()
+    mock_ydl.__enter__ = MagicMock(return_value=mock_ydl)
+    mock_ydl.__exit__ = MagicMock(return_value=False)
+    mock_ydl.extract_info = MagicMock(return_value=_SAMPLE_INFO)
+
+    with patch("yt_dlp.YoutubeDL", return_value=mock_ydl):
+        raw_page = extractor.fetch_video("https://www.youtube.com/watch?v=testvideoid")
+
+    assert raw_page.extra_metadata["view_count"] == "12345"
+    assert raw_page.extra_metadata["like_count"] == "678"
+    assert "cardiología" in raw_page.extra_metadata["tags_youtube"]
+    assert raw_page.extra_metadata["categories"] == "Education"
+    assert raw_page.extra_metadata["channel_url"].startswith("https://")
+
+
+def test_format_transcript_paragraphs() -> None:
+    text = "palabra " * 200
+    result = YouTubeRichExtractor._format_transcript(text.strip(), words_per_paragraph=80)
+    assert result.count("\n\n") >= 2  # 200 palabras / 80 → ~3 párrafos
+
+
+def test_format_transcript_empty_string() -> None:
+    assert YouTubeRichExtractor._format_transcript("") == ""

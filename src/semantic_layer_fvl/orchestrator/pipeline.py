@@ -522,7 +522,8 @@ class SemanticPipeline:
             :class:`PipelineRunSummary` con los resultados de la corrida.
         """
         from semantic_layer_fvl.extractors.google_news import GoogleNewsFeedBuilder
-        from semantic_layer_fvl.news_feeds import CURATED_NEWS_FEEDS
+        from semantic_layer_fvl.news_feeds import CURATED_NEWS_FEEDS, is_fvl_relevant
+        from semantic_layer_fvl.processors.cleaner import TextCleaner as _Cleaner
         from semantic_layer_fvl.processors.deduplicator import ContentDeduplicator
         from semantic_layer_fvl.processors.noise_presets import NEWS_NOISE
 
@@ -532,11 +533,16 @@ class SemanticPipeline:
         google_builder = GoogleNewsFeedBuilder(
             queries=self.settings.news_google_queries or None
         )
-        feed_configs = [(f.url, f.name, f.extra_noise) for f in CURATED_NEWS_FEEDS]
+        feed_configs: list[tuple[str, str, frozenset[str], bool]] = [
+            (f.url, f.name, f.extra_noise, f.requires_relevance_filter)
+            for f in CURATED_NEWS_FEEDS
+        ]
         for url in google_builder.feed_urls():
-            feed_configs.append((url, "Google News — FVL", frozenset()))
+            # Google News ya viene pre-filtrado por la query → no aplicar filtro adicional
+            feed_configs.append((url, "Google News — FVL", frozenset(), False))
 
-        for feed_url, feed_name, extra_noise in feed_configs:
+        skipped_irrelevant = 0
+        for feed_url, feed_name, extra_noise, needs_filter in feed_configs:
             try:
                 self.news_extractor.source_name = feed_name
                 raw_pages = self.news_extractor.fetch_feed(feed_url)
@@ -551,21 +557,32 @@ class SemanticPipeline:
                 )
                 continue
 
-            from semantic_layer_fvl.processors.cleaner import TextCleaner as _Cleaner
             cleaner = _Cleaner(extra_noise=NEWS_NOISE | extra_noise)
 
             for raw_page in raw_pages:
                 url_str = str(raw_page.url)
+
+                if needs_filter and not is_fvl_relevant(
+                    raw_page.title, raw_page.text_content
+                ):
+                    skipped_irrelevant += 1
+                    continue
+
                 if dedup.is_duplicate(url_str, raw_page.text_content):
                     logger.debug("[pipeline] Noticia duplicada, omitida: %s", url_str)
                     continue
+
                 try:
                     if fetch_full:
-                        try:
-                            full_page = self.crawler.fetch(url_str)
-                            raw_page = full_page
-                        except Exception:
-                            pass
+                        full_text = self._fetch_article_body(url_str)
+                        if full_text:
+                            raw_page = raw_page.model_copy(
+                                update={
+                                    "text_content": (
+                                        f"{raw_page.title}\n\n{full_text}"
+                                    )
+                                }
+                            )
 
                     cleaned = cleaner.clean(raw_page.text_content or "")
                     processed = self.structurer.build_document(
@@ -590,7 +607,66 @@ class SemanticPipeline:
                         )
                     )
 
+        if skipped_irrelevant:
+            logger.info(
+                "[pipeline] %d noticia(s) descartada(s) por no contener keywords FVL",
+                skipped_irrelevant,
+            )
         return self._finalize_summary(summary)
+
+    def _fetch_article_body(self, url: str) -> str | None:
+        """Descarga la URL y extrae el cuerpo del artículo con selectores genéricos.
+
+        A diferencia de :meth:`WebCrawler.fetch` (que aplica selectores específicos
+        de la FVL), este método busca selectores comunes de noticias (``<article>``,
+        ``main``, ``[itemprop=articleBody]``) en cualquier medio externo.
+
+        Args:
+            url: URL del artículo a descargar.
+
+        Returns:
+            Cuerpo del artículo en texto plano (>200 chars) o ``None`` si no se
+            puede extraer.
+        """
+        try:
+            response = self.crawler.client.get(url)
+            response.raise_for_status()
+            html = response.text
+        except Exception:
+            return None
+
+        from bs4 import BeautifulSoup
+
+        try:
+            soup = BeautifulSoup(html, "html.parser")
+        except Exception:
+            return None
+
+        for tag_name in ("script", "style", "nav", "footer", "aside", "form"):
+            for tag in soup.find_all(tag_name):
+                tag.decompose()
+        for selector in (
+            ".related", ".share", ".comments", ".social", ".newsletter",
+            ".advertisement", ".ad", "[class*='related']", "[class*='share']",
+        ):
+            for tag in soup.select(selector):
+                tag.decompose()
+
+        for selector in (
+            "article",
+            "[itemprop='articleBody']",
+            ".article-body",
+            ".article__body",
+            ".entry-content",
+            ".post-content",
+            "main",
+        ):
+            elem = soup.select_one(selector)
+            if elem:
+                text = elem.get_text(separator="\n\n", strip=True)
+                if len(text) > 200:
+                    return text
+        return None
 
     @staticmethod
     def _build_success_result(

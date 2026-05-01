@@ -116,30 +116,65 @@ class YouTubeRichExtractor:
         """Construye un ``RawPage`` a partir del diccionario de metadatos de yt-dlp."""
         title = info.get("title") or "Sin título"
         channel = info.get("channel") or info.get("uploader") or ""
+        channel_url = info.get("channel_url") or info.get("uploader_url") or ""
         description = info.get("description") or ""
         upload_date = info.get("upload_date") or ""
         duration = int(info.get("duration") or 0)
         video_id = info.get("id") or ""
         webpage_url = info.get("webpage_url") or original_url
+        view_count = info.get("view_count")
+        like_count = info.get("like_count")
+        tags = info.get("tags") or []
+        categories = info.get("categories") or []
+        chapters = info.get("chapters") or []
+        thumbnail = info.get("thumbnail") or ""
 
         upload_date_fmt = self._format_date(upload_date)
         duration_fmt = self._format_duration(duration) if duration else "Desconocida"
         clean_desc = self._clean_description(description)
         transcript = self._extract_transcript(info)
+        transcript_formatted = self._format_transcript(transcript) if transcript else None
 
-        parts = [
+        parts: list[str] = [
             f"# {title}",
             "",
-            f"**Canal:** {channel}",
-            f"**Publicado:** {upload_date_fmt}",
-            f"**Duración:** {duration_fmt}",
+            "## Información del video",
+            "",
+            f"- **Canal:** {channel}" + (f" — [{channel_url}]({channel_url})" if channel_url else ""),
+            f"- **Publicado:** {upload_date_fmt}",
+            f"- **Duración:** {duration_fmt}",
+        ]
+        if view_count is not None:
+            parts.append(f"- **Visualizaciones:** {view_count:,}")
+        if like_count is not None:
+            parts.append(f"- **Likes:** {like_count:,}")
+        if categories:
+            parts.append(f"- **Categorías:** {', '.join(categories)}")
+        if tags:
+            parts.append(f"- **Etiquetas:** {', '.join(tags[:15])}")
+        parts.append(f"- **URL:** {webpage_url}")
+
+        parts.extend([
             "",
             "## Descripción",
+            "",
             clean_desc or "_Sin descripción disponible._",
+        ])
+
+        if chapters:
+            parts.extend(["", "## Capítulos", ""])
+            for ch in chapters:
+                start = self._format_duration(int(ch.get("start_time") or 0))
+                ch_title = (ch.get("title") or "").strip()
+                if ch_title:
+                    parts.append(f"- `{start}` — {ch_title}")
+
+        parts.extend([
             "",
             "## Transcripción",
-            transcript or "_Transcripción no disponible._",
-        ]
+            "",
+            transcript_formatted or "_Transcripción no disponible._",
+        ])
         text_content = "\n".join(parts)
 
         metadata = ExtractionMetadata(
@@ -148,19 +183,48 @@ class YouTubeRichExtractor:
             extractor_name="youtube_rich",
             checksum=video_id,
         )
+
+        extra: dict[str, str] = {
+            "video_id": video_id,
+            "channel": channel,
+            "duration_seconds": str(duration),
+            "upload_date": upload_date_fmt,
+            "source_type": "youtube_rich",
+        }
+        if channel_url:
+            extra["channel_url"] = channel_url
+        if view_count is not None:
+            extra["view_count"] = str(view_count)
+        if like_count is not None:
+            extra["like_count"] = str(like_count)
+        if tags:
+            extra["tags_youtube"] = ", ".join(tags[:15])
+        if categories:
+            extra["categories"] = ", ".join(categories)
+        if thumbnail:
+            extra["thumbnail"] = thumbnail
+        if transcript:
+            extra["has_transcript"] = "true"
+            extra["transcript_chars"] = str(len(transcript))
+
         return RawPage(
             url=webpage_url,
             title=title,
             text_content=text_content,
             metadata=metadata,
-            extra_metadata={
-                "video_id": video_id,
-                "channel": channel,
-                "duration_seconds": str(duration),
-                "upload_date": upload_date_fmt,
-                "source_type": "youtube_rich",
-            },
+            extra_metadata=extra,
         )
+
+    @staticmethod
+    def _format_transcript(text: str, words_per_paragraph: int = 80) -> str:
+        """Divide la transcripción plana en párrafos legibles."""
+        words = text.split()
+        if not words:
+            return ""
+        paragraphs: list[str] = []
+        for i in range(0, len(words), words_per_paragraph):
+            paragraphs.append(" ".join(words[i : i + words_per_paragraph]))
+        return "\n\n".join(paragraphs)
 
     def _extract_transcript(self, info: dict) -> str | None:
         """Extrae el texto de la transcripción del video, priorizando subtítulos manuales."""

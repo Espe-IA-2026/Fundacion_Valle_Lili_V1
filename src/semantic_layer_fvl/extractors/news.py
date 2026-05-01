@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import email.utils
+import re
 import xml.etree.ElementTree as ET
 
+from bs4 import BeautifulSoup
 from pydantic import AnyHttpUrl, TypeAdapter
 
 from semantic_layer_fvl.config import Settings, get_settings
@@ -13,6 +15,21 @@ from semantic_layer_fvl.schemas import ExtractionMetadata, RawPage
 
 
 _HTTP_URL_ADAPTER = TypeAdapter(AnyHttpUrl)
+_WHITESPACE_RE = re.compile(r"\s+")
+
+
+def _strip_html(value: str | None) -> str | None:
+    """Limpia HTML embebido (CDATA RSS) y normaliza el espacio en blanco."""
+    if not value:
+        return value
+    if "<" in value and ">" in value:
+        try:
+            soup = BeautifulSoup(value, "html.parser")
+            value = soup.get_text(separator=" ", strip=True)
+        except Exception:
+            pass
+    cleaned = _WHITESPACE_RE.sub(" ", value).strip()
+    return cleaned or None
 
 
 class NewsFeedExtractor:
@@ -74,13 +91,19 @@ class NewsFeedExtractor:
 
         for item in items[: self.settings.news_feed_limit]:
             link = self._find_text(item, "link")
-            title = self._find_text(item, "title")
+            title = _strip_html(self._find_text(item, "title"))
             if not link or not title:
                 continue
 
             normalized_link = _HTTP_URL_ADAPTER.validate_python(link)
 
-            description = self._find_text(item, "description")
+            description = _strip_html(self._find_text(item, "description"))
+            content_encoded = _strip_html(
+                self._find_text_with_namespace(
+                    item, "content", "http://purl.org/rss/1.0/modules/content/"
+                )
+            )
+            categories = self._find_categories(item)
             published = self._normalize_datetime(self._find_text(item, "pubDate"))
             metadata = ExtractionMetadata(
                 source_url=normalized_link,
@@ -89,8 +112,10 @@ class NewsFeedExtractor:
                 http_status=status_code,
                 content_type=content_type,
             )
+            body = content_encoded or description or ""
+            cat_line = f"Categorías: {', '.join(categories)}" if categories else ""
             text_content = "\n\n".join(
-                part for part in [title, description, published] if part
+                part for part in [title, body, cat_line, published] if part
             )
             pages.append(
                 RawPage(
@@ -112,15 +137,16 @@ class NewsFeedExtractor:
         entries = [child for child in root if self._local_name(child.tag) == "entry"]
 
         for entry in entries[: self.settings.news_feed_limit]:
-            title = self._find_text_ns(entry, "title")
+            title = _strip_html(self._find_text_ns(entry, "title"))
             link = self._find_link_ns(entry)
             if not link or not title:
                 continue
 
             normalized_link = _HTTP_URL_ADAPTER.validate_python(link)
 
-            summary = self._find_text_ns(entry, "summary") or self._find_text_ns(
-                entry, "content"
+            summary = _strip_html(
+                self._find_text_ns(entry, "summary")
+                or self._find_text_ns(entry, "content")
             )
             published = self._find_text_ns(entry, "updated") or self._find_text_ns(
                 entry, "published"
@@ -154,6 +180,29 @@ class NewsFeedExtractor:
             return None
         text = found.text.strip()
         return text or None
+
+    @staticmethod
+    def _find_text_with_namespace(
+        element: ET.Element, local_name: str, namespace: str
+    ) -> str | None:
+        """Busca un hijo con namespace (e.g. ``content:encoded``) y devuelve su texto."""
+        qualified = f"{{{namespace}}}{local_name}"
+        found = element.find(qualified)
+        if found is None or found.text is None:
+            return None
+        text = found.text.strip()
+        return text or None
+
+    @staticmethod
+    def _find_categories(element: ET.Element) -> list[str]:
+        """Extrae todas las categorías declaradas en una entrada RSS."""
+        categories: list[str] = []
+        for child in element:
+            if child.tag == "category" and child.text:
+                category = child.text.strip()
+                if category:
+                    categories.append(category)
+        return categories
 
     @classmethod
     def _find_text_ns(cls, element: ET.Element, local_name: str) -> str | None:
