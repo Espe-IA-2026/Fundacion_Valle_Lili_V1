@@ -40,5 +40,4 @@ geckodriver
 # Carpeta data
 data/*
 .claude
-.claude
-.github/*
+CLAUDE.md
