@@ -1,14 +1,30 @@
+"""Normalización de texto extraído y eliminación de ruido de navegación."""
+
 from __future__ import annotations
 
 import re
 
 
 class TextCleaner:
-    """Normalizes extracted text and removes common navigation noise."""
+    """Normaliza texto extraído y elimina ruido de navegación común."""
 
-    def __init__(self, *, min_line_length: int = 2) -> None:
+    def __init__(
+        self,
+        *,
+        min_line_length: int = 2,
+        extra_noise: frozenset[str] | set[str] | None = None,
+    ) -> None:
+        """Inicializa el limpiador de texto.
+
+        Args:
+            min_line_length: Longitud mínima de caracteres que debe tener una línea
+                para no ser descartada como ruido.
+            extra_noise: Conjunto adicional de líneas de ruido específicas de la fuente.
+                Se fusiona con el conjunto base predeterminado. Puede pasarse uno de los
+                presets definidos en :mod:`semantic_layer_fvl.processors.noise_presets`.
+        """
         self.min_line_length = min_line_length
-        self._noise_lines = {
+        base_noise: set[str] = {
             "menu",
             "inicio",
             "home",
@@ -21,8 +37,17 @@ class TextCleaner:
             "twitter",
             "x",
         }
+        self._noise_lines = base_noise | (extra_noise or set())
 
     def clean(self, text: str | None) -> str:
+        """Limpia y normaliza el texto eliminando duplicados y líneas de ruido.
+
+        Args:
+            text: Texto crudo a procesar. Si es ``None`` o vacío, devuelve ``""``.
+
+        Returns:
+            Texto limpio con líneas únicas, sin ruido y con espacios normalizados.
+        """
         if not text:
             return ""
 
@@ -53,9 +78,11 @@ class TextCleaner:
 
     @staticmethod
     def split_paragraphs(text: str) -> list[str]:
+        """Divide el texto en párrafos no vacíos separados por líneas en blanco."""
         return [chunk.strip() for chunk in text.split("\n\n") if chunk.strip()]
 
     def _is_noise(self, line: str) -> bool:
+        """Devuelve ``True`` si la línea es considerada ruido de navegación."""
         lowered = line.casefold()
         if lowered in self._noise_lines:
             return True
@@ -63,6 +90,7 @@ class TextCleaner:
 
     @staticmethod
     def _normalize_line(line: str) -> str:
+        """Colapsa espacios internos y corrige puntuación pegada en una línea."""
         compact = re.sub(r"\s+", " ", line).strip()
         compact = compact.replace(" ,", ",").replace(" .", ".")
         return compact

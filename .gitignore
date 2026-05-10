@@ -27,3 +27,18 @@ runs/
 knowledge/*
 !knowledge/.gitkeep
 vectorstore/
+.chroma/
+
+# Chatbot output (JSON generado por el scraper)
+data/*.json
+!data/.gitkeep
+
+# Selenium / WebDriver
+chromedriver
+geckodriver
+
+# Carpeta data
+data/*
+.claude
+.claude
+.github/*

@@ -1,4 +1,4 @@
-"""Base package for the semantic layer project."""
+"""Paquete base del proyecto de capa semántica para la Fundación Valle del Lili."""
 
 __all__ = ["__version__"]
 

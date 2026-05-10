@@ -1,41 +1,39 @@
 [project]
-name = "plan-capa-semantica"
-version = "0.1.0"
-description = "Base del proyecto para construir la capa semantica de la Fundacion Valle del Lili."
+name = "chatbot-fvl"
+version = "1.0.0"
+description = "Módulo 1 — Chatbot corporativo para la Fundación Valle del Lili (Context Stuffing, sin RAG)."
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.11"
 dependencies = [
-    "httpx>=0.28,<0.29",
+    "beautifulsoup4>=4.12,<5.0",
+    "httpx>=0.27,<1.0",
+    "requests>=2.31,<3.0",
+    "python-dotenv>=1.0,<2.0",
     "pydantic>=2.11,<3.0",
     "pydantic-settings>=2.10,<3.0",
-    "chromadb>=1.0,<2.0",
-    "sentence-transformers>=4.0,<5.0",
-    "pyyaml>=6.0,<7.0",
-    "fastapi>=0.115,<1.0",
-    "uvicorn[standard]>=0.34,<1.0",
+    "markdownify>=0.12,<1.0",
+    "yt-dlp>=2024.10.0",
+    "langchain>=0.3,<0.4",
+    "langchain-openai>=0.2,<0.3",
+    "openai>=1.40,<2.0",
+    "streamlit>=1.35,<2.0",
 ]
-
-[project.scripts]
-semantic-layer-fvl = "semantic_layer_fvl.cli:main"
 
 [dependency-groups]
 dev = [
     "pytest>=8.4,<9.0",
     "ruff>=0.9,<1.0",
 ]
-app = [
-    "langchain>=0.3,<1.0",
-    "langchain-ollama>=0.3,<1.0",
-    "sentence-transformers>=4.0,<5.0",
-    "streamlit>=1.40,<2.0",
-]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[project.scripts]
+semantic-layer-fvl = "semantic_layer_fvl.cli:main"
+
 [tool.hatch.build.targets.wheel]
-packages = ["src/semantic_layer_fvl"]
+packages = ["src/semantic_layer_fvl","src/app"]
 
 [tool.pytest.ini_options]
 addopts = "-p no:cacheprovider"

@@ -1,29 +1,91 @@
+"""Definición de las URLs semilla iniciales para el pipeline de extracción."""
+
 from __future__ import annotations
 
 from urllib.parse import urljoin
+
+from pydantic import AnyHttpUrl, TypeAdapter
 
 from semantic_layer_fvl.schemas import DocumentCategory, UrlRecord
 
 DEFAULT_SEED_PATHS: tuple[tuple[str, DocumentCategory, int, str], ...] = (
     ("/", DocumentCategory.ORGANIZACION, 10, "Pagina principal y panorama general."),
-    ("/nuestra-institucion", DocumentCategory.ORGANIZACION, 20, "Historia, mision, vision y valores institucionales."),  # noqa: E501
-    ("/servicios", DocumentCategory.SERVICIOS, 30, "Servicios medicos institucionales."),
+    (
+        "/nuestra-institucion",
+        DocumentCategory.ORGANIZACION,
+        20,
+        "Historia, mision, vision y valores institucionales.",
+    ),  # noqa: E501
+    (
+        "/servicios",
+        DocumentCategory.SERVICIOS,
+        30,
+        "Servicios medicos institucionales.",
+    ),
     ("/especialidades", DocumentCategory.SERVICIOS, 40, "Especialidades medicas."),
-    ("/directorio-medico", DocumentCategory.TALENTO_HUMANO, 50, "Directorio de especialistas."),
-    ("/nuestra-institucion/nuestras-sedes", DocumentCategory.SEDES_UBICACIONES, 60, "Ubicaciones y puntos de atencion."),  # noqa: E501
-    ("/contactanos", DocumentCategory.CONTACTO, 70, "Canales de contacto institucionales."),
-    ("/nuestra-institucion/marco-legal", DocumentCategory.NORMATIVIDAD, 80, "Marco legal, politicas y derechos."),  # noqa: E501
-    ("/investigacion", DocumentCategory.INVESTIGACION, 90, "Centro de investigacion clinica."),
-    ("/educacion", DocumentCategory.EDUCACION, 100, "Programas de formacion y docencia."),
-    ("/noticias-y-eventos", DocumentCategory.NOTICIAS, 110, "Noticias y eventos institucionales."),
+    (
+        "/directorio-medico",
+        DocumentCategory.TALENTO_HUMANO,
+        50,
+        "Directorio de especialistas.",
+    ),
+    (
+        "/nuestra-institucion/nuestras-sedes",
+        DocumentCategory.SEDES_UBICACIONES,
+        60,
+        "Ubicaciones y puntos de atencion.",
+    ),  # noqa: E501
+    (
+        "/contactanos",
+        DocumentCategory.CONTACTO,
+        70,
+        "Canales de contacto institucionales.",
+    ),
+    (
+        "/nuestra-institucion/marco-legal",
+        DocumentCategory.NORMATIVIDAD,
+        80,
+        "Marco legal, politicas y derechos.",
+    ),  # noqa: E501
+    (
+        "/investigacion",
+        DocumentCategory.INVESTIGACION,
+        90,
+        "Centro de investigacion clinica.",
+    ),
+    (
+        "/educacion",
+        DocumentCategory.EDUCACION,
+        100,
+        "Programas de formacion y docencia.",
+    ),
+    (
+        "/noticias-y-eventos",
+        DocumentCategory.NOTICIAS,
+        110,
+        "Noticias y eventos institucionales.",
+    ),
 )
 
+_HTTP_URL_ADAPTER = TypeAdapter(AnyHttpUrl)
 
-def build_seed_urls(base_url: str) -> list[UrlRecord]:
+
+def build_seed_urls(base_url: str | AnyHttpUrl) -> list[UrlRecord]:
+    """Construye y devuelve la lista de URLs semilla ordenada por prioridad.
+
+    Combina la ``base_url`` con cada ruta definida en ``DEFAULT_SEED_PATHS`` y
+    genera un ``UrlRecord`` por cada una.
+
+    Args:
+        base_url: URL base del sitio objetivo (p.ej. ``"https://valledellili.org"``).
+
+    Returns:
+        Lista de ``UrlRecord`` ordenada por prioridad ascendente.
+    """
     normalized_base_url = str(base_url)
     records = [
         UrlRecord(
-            url=urljoin(normalized_base_url, path),
+            url=_HTTP_URL_ADAPTER.validate_python(urljoin(normalized_base_url, path)),
             category=category,
             priority=priority,
             notes=notes,
