@@ -35,7 +35,7 @@ class MarkdownWriter:
         """
         folder = domain_folder or document.document.category.value
         return (
-            self.settings.resolved_output_dir / folder / f"{document.document.slug}.md"
+            self.settings.resolved_knowledge_dir / folder / f"{document.document.slug}.md"
         )
 
     def write(

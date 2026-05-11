@@ -213,7 +213,7 @@ def handle_show_config() -> int:
     settings = get_settings()
     print(f"project_name={settings.project_name}")
     print(f"target_base_url={settings.target_base_url}")
-    print(f"output_dir={settings.output_dir}")
+    print(f"knowledge_dir={settings.knowledge_dir}")
     print(f"request_interval_seconds={settings.request_interval_seconds}")
     print(f"respect_robots_txt={settings.respect_robots_txt}")
     return 0

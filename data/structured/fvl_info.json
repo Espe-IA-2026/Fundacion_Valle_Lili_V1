@@ -1,0 +1,20 @@
+ {
+    "contactos": {
+      "central": "+57 (2) 331 7000",
+      "urgencias": "+57 (2) 331 7001",
+      "email": "info@valledellili.org"
+    },
+    "horarios": {
+      "urgencias": "24/7",
+      "consulta_externa": "Lunes a viernes 7:00–17:00, sábados 7:00–12:00",
+      "laboratorio": "Lunes a sábado 6:00–18:00"
+    },
+    "sedes": [
+      {
+        "nombre": "Sede Principal",
+        "direccion": "Cl. 98 #18-49, Cali",
+        "telefono": "+57 (2) 331 7000"
+      }
+    ],
+    "servicios_destacados": ["Cardiología", "Trasplantes", "Oncología", "Neurocirugía"]
+  }

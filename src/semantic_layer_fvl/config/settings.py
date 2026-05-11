@@ -19,9 +19,20 @@ class Settings(BaseSettings):
 
     project_name: str = "semantic-layer-fvl"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
-    output_dir: Path = Path("./data/knowledge")
-    runs_dir: Path = Path("./reports/runs")
 
+    # Rutas principales
+    knowledge_dir: Path = Path("./data/knowledge")
+    chroma_persist_dir: Path = Path("./data/chroma_db")
+    runs_dir: Path = Path("./reports/runs")
+    structured_data_path: Path = Path("data/structured/fvl_info.json")
+
+    # Módulo 2 — RAG
+    embedding_model: str = "text-embedding-3-small"
+    rag_top_k: int = Field(default=5, ge=1)
+    rag_score_threshold: float = Field(default=0.3, ge=0.0, le=1.0)
+    agent_max_iterations: int = Field(default=6, ge=1)
+
+    # HTTP
     requests_per_second: float = Field(default=0.5, gt=0)
     request_timeout: int = Field(default=30, gt=0)
     max_retries: int = Field(default=2, ge=0)
@@ -31,10 +42,10 @@ class Settings(BaseSettings):
     target_base_url: AnyHttpUrl = Field(default=AnyHttpUrl("https://valledellili.org"))
     respect_robots_txt: bool = True
 
+    # YouTube y noticias
     youtube_search_limit: int = Field(default=50, ge=1)
     news_feed_limit: int = Field(default=50, ge=1)
     news_search_days: int = Field(default=365, ge=1)
-
     youtube_search_queries: list[str] = Field(
         default=["Fundación Valle del Lili", "Hospital Valle del Lili"],
     )
@@ -65,11 +76,18 @@ class Settings(BaseSettings):
         return Path(__file__).resolve().parents[3]
 
     @property
-    def resolved_output_dir(self) -> Path:
-        """Ruta absoluta al directorio de salida, resuelta desde la raíz del proyecto."""
-        if self.output_dir.is_absolute():
-            return self.output_dir
-        return (self.project_root / self.output_dir).resolve()
+    def resolved_knowledge_dir(self) -> Path:
+        """Ruta absoluta al directorio de conocimiento, resuelta desde la raíz del proyecto."""
+        if self.knowledge_dir.is_absolute():
+            return self.knowledge_dir
+        return (self.project_root / self.knowledge_dir).resolve()
+
+    @property
+    def resolved_chroma_persist_dir(self) -> Path:
+        """Ruta absoluta al directorio de persistencia de ChromaDB."""
+        if self.chroma_persist_dir.is_absolute():
+            return self.chroma_persist_dir
+        return (self.project_root / self.chroma_persist_dir).resolve()
 
     @property
     def resolved_runs_dir(self) -> Path:

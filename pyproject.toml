@@ -17,6 +17,9 @@ dependencies = [
     "langchain-openai>=0.2,<0.3",
     "openai>=1.40,<2.0",
     "streamlit>=1.35,<2.0",
+    "chromadb>=1.5.9",
+    "langchain-chroma>=0.2.6",
+    "langgraph>=1.0.1",
 ]
 
 [dependency-groups]
@@ -33,7 +36,7 @@ build-backend = "hatchling.build"
 semantic-layer-fvl = "semantic_layer_fvl.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/semantic_layer_fvl","src/app"]
+packages = ["src/semantic_layer_fvl","src/app","src/rag","src/app_agent"]
 
 [tool.pytest.ini_options]
 addopts = "-p no:cacheprovider"
