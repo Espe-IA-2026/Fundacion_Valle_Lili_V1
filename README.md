@@ -1,25 +1,26 @@
-# Asistente Virtual FVL - Modulo 1
+# Asistente Virtual FVL — Módulo 1 + Módulo 2
 
-Pipeline de extraccion y estructuracion de conocimiento para la Fundacion Valle del Lili + dashboard Streamlit con tres funcionalidades de LLM orquestadas con LangChain.
-
-Premisa del proyecto en esta fase: **NO es un RAG**. Las tres tareas responden usando contexto consolidado inyectado en el prompt de sistema.
+Pipeline de extracción y estructuración de conocimiento para la Fundación Valle del Lili + dashboard Streamlit con cuatro funcionalidades LLM: tres basadas en context stuffing (NO-RAG) y un agente conversacional con recuperación semántica dinámica (RAG).
 
 ---
 
 ## 1. Objetivo
 
-Este repositorio tiene dos piezas integradas:
+Este repositorio integra dos módulos complementarios:
 
-1. `semantic_layer_fvl`: capa semantica que extrae informacion publica y genera una base de conocimiento en Markdown.
-2. `app`: motor y frontend que consumen esa base de conocimiento con estrategia de context stuffing (sin retrieval vectorial) y exponen tres funcionalidades de LLM.
+1. **`semantic_layer_fvl`**: capa semántica que extrae información pública institucional y genera una base de conocimiento en Markdown con frontmatter YAML extendido.
+2. **`app`** (Módulo 1 — NO-RAG): motor y frontend que consumen esa base de conocimiento usando context stuffing — todo el conocimiento consolidado en el prompt de sistema — y exponen tres funcionalidades LLM.
+3. **`app_agent`** (Módulo 2 — RAG): agente conversacional ReACT que recupera dinámicamente fragmentos relevantes desde un índice vectorial ChromaDB, mantiene memoria de sesión por checkpointer y responde únicamente con información institucional verificada.
 
-Resultado esperado:
+Resultado final:
 
-- Salida limpia en `data/knowledge/` por dominios institucionales.
-- Dashboard con tres herramientas que responden usando solo contexto institucional consolidado:
-  - **Q&A conversacional**: chatbot con historial de turnos.
-  - **Resumen**: sintesis estructurada en Markdown de cualquier tema institucional.
-  - **FAQ**: entre 5 y 8 preguntas frecuentes con respuestas fundamentadas en los documentos.
+- Base de conocimiento limpia en `data/knowledge/` organizada por dominios institucionales.
+- Índice vectorial ChromaDB en `data/chroma_db/` con embeddings sobre los documentos generados.
+- Dashboard Streamlit con cuatro herramientas:
+  - **💬 Q&A conversacional** (NO-RAG): chatbot con historial de turnos y context stuffing.
+  - **📋 Resumen** (NO-RAG): síntesis estructurada en Markdown de cualquier tema institucional.
+  - **❓ FAQ** (NO-RAG): 5–8 preguntas frecuentes con respuestas fundamentadas en documentos.
+  - **🤖 Agente RAG**: agente ReACT con recuperación semántica dinámica y memoria de sesión.
 
 ---
 
@@ -36,7 +37,7 @@ valledellili.org      YouTube (yt-dlp)      Feeds RSS curados
                              |
                              v
                     ContentDeduplicator
-                    (URL canonica + SHA-256)
+                    (URL canónica + SHA-256)
                              |
                              v
                       RawPage (Pydantic)
@@ -54,30 +55,47 @@ valledellili.org      YouTube (yt-dlp)      Feeds RSS curados
                              |
                              v
          data/knowledge/<dominio>/<slug>.md
-                             |
-                             v
-          app.engine -> contexto consolidado + compactacion
-                             |
-                             v
-                   LangChain LCEL + OpenAI (NO-RAG)
-                   ┌────────────┼──────────────┐
-                   v            v              v
-               Q&A chain  Summary chain   FAQ chain
-               (streaming)
-                                |
-                                v
-                   Streamlit dashboard (3 pestanas)
-                   [wide layout · sidebar · CSS profesional]
+                    ┌────────┴─────────────────────────────────┐
+                    │ MÓDULO 1 (NO-RAG)                         │ MÓDULO 2 (RAG)
+                    v                                           v
+         app.engine → contexto consolidado         KnowledgeIndexer
+                    + compactación                  (rag/indexer.py)
+                    |                                    |
+                    v                              OpenAI Embeddings
+          LangChain LCEL + OpenAI              text-embedding-3-small
+          ┌──────────┬──────────┐                    |
+          v          v          v                    v
+       Q&A chain  Summary   FAQ chain        ChromaDB (vectorstore)
+       (streaming) chain                     data/chroma_db/
+                                                    |
+                                                    v
+                                          KnowledgeRetriever
+                                           (rag/retriever.py)
+                                                    |
+                                                    v
+                                      @tool retrieve_fvl_knowledge
+                                         (app_agent/tools.py)
+                                                    |
+                                                    v
+                                    create_agent (LangChain) +
+                                    InMemorySaver checkpointer
+                                       (app_agent/agent.py)
+                                                    |
+                                          ciclo ReACT:
+                                      razonar → tool call
+                                      → razonar → responder
+                                                    |
+                                                    v
+                                    stream_agent_response()
+                                       thread_id UUID/sesión
+                                       (app_agent/engine.py)
+                                                    |
+                    └───────────────────────────────┘
+                                             |
+                                             v
+                              Streamlit dashboard (4 pestañas)
+                         [wide layout · sidebar · CSS profesional]
 ```
-
-Capas principales:
-
-- `src/semantic_layer_fvl/extractors`: scraping, YouTube enriquecido, feeds RSS y Google News.
-- `src/semantic_layer_fvl/processors`: limpieza configurable y deduplicacion cross-source.
-- `src/semantic_layer_fvl/writers`: persistencia a Markdown con frontmatter extendido.
-- `src/semantic_layer_fvl/orchestrator/pipeline.py`: coordinacion del flujo y nuevos metodos de fuentes externas.
-- `src/app/engine.py`: motor del chatbot con contexto consolidado y streaming LCEL.
-- `src/app/main.py`: frontend Streamlit profesional.
 
 ---
 
@@ -85,123 +103,100 @@ Capas principales:
 
 Definidos en `src/semantic_layer_fvl/domains.py`:
 
-- `servicios`
-- `especialistas`
-- `sedes`
-- `institucional`
+| Dominio | Carpeta destino | Comando |
+|---|---|---|
+| `servicios` | `data/knowledge/01_servicios/` | `crawl-domain servicios --write` |
+| `especialistas` | `data/knowledge/02_especialistas/` | `crawl-domain especialistas --write` |
+| `sedes` | `data/knowledge/03_sedes/` | `crawl-domain sedes --write` |
+| `institucional` | `data/knowledge/04_institucional/` | `crawl-domain institucional --write` |
 
-Cada dominio define sitemaps, patrones include/exclude de URL, selector principal de contenido, metadatos extra por selector y reglas de corte y limpieza de markdown.
-
----
-
-## 3b. Fuentes Externas (Iteracion 2)
-
-Fuentes adicionales legalmente accesibles que amplian el corpus:
-
-| Tipo | Comando CLI | Carpeta destino | Requiere auth |
-|---|---|---|---|
-| YouTube enriquecido (yt-dlp) | `youtube-search` | `data/knowledge/10_multimedia/` | No |
-| Noticias curadas (RSS) | `news-curated` | `data/knowledge/09_noticias/` | No |
-| Google News RSS por keyword | incluido en `news-curated` | `data/knowledge/09_noticias/` | No |
-| Feeds personalizados | `youtube-feed` / `news-feed` | segun comando | No |
-
-**Redes sociales (LinkedIn, Instagram, Twitter/X)**: no se incluyen por restricciones de TOS y riesgo de bloqueo. Si la FVL provee tokens oficiales en el futuro, se pueden agregar sin refactor mayor.
-
-Componentes de soporte agregados en la iteracion 2:
-
-- `ContentDeduplicator` — deduplicacion por URL canonica y checksum SHA-256 del contenido.
-- `TextCleaner` configurable con presets `WEB_FVL_NOISE`, `NEWS_NOISE`, `YOUTUBE_NOISE`.
-- `HttpClient.get()` con retry exponencial (respeta `Retry-After`; usa `MAX_RETRIES` del settings).
-- Campos opcionales en `SourceDocument`: `source_type`, `external_id`, `published_at`.
+Cada dominio define sitemaps, patrones include/exclude de URL, selector principal de contenido, metadatos extra por selector y reglas de limpieza de markdown.
 
 ---
 
-## 4. Flujo de Ejecucion
+## 4. Fuentes Externas
 
-Comando principal por dominio:
+Fuentes adicionales legalmente accesibles que amplían el corpus:
 
-```powershell
-uv run semantic-layer-fvl crawl-domain servicios --write
-```
+| Tipo | Comando CLI | Carpeta destino |
+|---|---|---|
+| YouTube enriquecido (yt-dlp) | `youtube-search` | `data/knowledge/10_multimedia/` |
+| Noticias curadas (RSS) | `news-curated` | `data/knowledge/09_noticias/` |
+| Google News RSS por keyword | incluido en `news-curated` | `data/knowledge/09_noticias/` |
 
-Secuencia:
-
-1. CLI parsea comando (`src/semantic_layer_fvl/cli.py`).
-2. `SemanticPipeline.run_domain()` obtiene URLs del sitemap.
-3. `WebCrawler.fetch_domain_page()` descarga HTML, limpia ruido y convierte a markdown.
-4. Estructuracion semantica (`structurer.py`) y armado de documento.
-5. Writer guarda `.md` y, opcionalmente, resumen de corrida.
+**Redes sociales (LinkedIn, Instagram, Twitter/X)**: excluidas por restricciones de TOS. Si la FVL provee tokens oficiales, se pueden agregar sin refactor mayor.
 
 ---
 
-## 5. Estrategia del Asistente (NO-RAG)
+## 5. Módulo 1 — Estrategia NO-RAG
 
-Las tres funcionalidades **no usan vectorstore ni retrieval semantico** en esta fase.
+Las tres primeras pestañas no usan vectorstore ni retrieval semántico. El conocimiento se consolida y se inyecta íntegro en el prompt de sistema de cada cadena.
 
-Flujo compartido:
+### Cadenas LangChain disponibles (`src/app/engine.py`)
 
-1. Carga recursiva de `.md` desde `KNOWLEDGE_DIR`.
-2. Consolidacion de todos los documentos en un solo contexto compactado.
-3. Inyeccion de ese contexto en el prompt de sistema de cada cadena.
-
-Las tres cadenas LangChain disponibles en `src/app/engine.py`:
-
-| Funcion | Cadena | Descripcion |
+| Función | Cadena | Descripción |
 |---|---|---|
 | `build_chain()` | Q&A | Chat multi-turno con `MessagesPlaceholder`. Temperatura 0.1. |
-| `build_summary_chain()` | Resumen | Genera sintesis estructurada en Markdown por tema. Temperatura 0.2. |
-| `build_faq_chain()` | FAQ | Genera 5-8 preguntas frecuentes con respuestas. Temperatura 0.2. |
+| `build_summary_chain()` | Resumen | Síntesis estructurada en Markdown por tema. Temperatura 0.2. |
+| `build_faq_chain()` | FAQ | 5–8 preguntas frecuentes con respuestas. Temperatura 0.2. |
 
-Funciones de invocacion:
-
-- `get_response(chain, context, question, history)` — Q&A bloqueante (resultado completo).
-- `stream_response(chain, context, question, history)` — Q&A en streaming; devuelve un generador de chunks que `st.write_stream()` consume token a token.
-- `get_summary(chain, context, topic)` — Resumen de un tema.
-- `get_faq(chain, context, topic)` — FAQ sobre un tema.
-
-La carga de recursos usa `@st.cache_resource` para que el conocimiento y las tres cadenas se inicialicen una sola vez por sesion del servidor.
-
----
-
-## 6. Optimizaciones de Costo de Inferencia (Implementadas)
+### Optimizaciones de costo de inferencia
 
 Para reducir tokens sin romper la premisa NO-RAG:
 
-1. **Scope correcto de conocimiento**
-- `KNOWLEDGE_DIR=data/knowledge`
-- Evita cargar todo `data/`.
+1. **Scope correcto de conocimiento**: `KNOWLEDGE_DIR=data/knowledge`.
+2. **Compactación determinista de contexto**: normalización de saltos de línea, reemplazo de frases repetitivas por abreviaturas y compresión por léxico de líneas (`LEXICO_LINEAS`).
+3. **Historial con presupuesto**: límite por turnos, por caracteres totales y por mensaje.
+4. **Presupuestos de salida por tarea**: `RESPONSE_MAX_TOKENS`, `SUMMARY_MAX_TOKENS`, `FAQ_MAX_TOKENS`.
+5. **Trazabilidad**: `data/debug_context_raw.txt` (consolidado original) y `data/debug_context.txt` (consolidado compacto).
 
-2. **Compactacion deterministica de contexto**
-- normaliza saltos de linea
-- reemplaza encabezados/frases repetitivas por abreviaturas
-- agrega compresion por lexico de lineas repetidas (`LEXICO_LINEAS`)
+---
 
-3. **Historial con presupuesto**
-- limite por turnos
-- limite por caracteres totales
-- limite por mensaje
+## 6. Módulo 2 — Agente RAG
 
-4. **Presupuestos de salida por tarea**
-- `RESPONSE_MAX_TOKENS` para Q&A (default 500)
-- `SUMMARY_MAX_TOKENS` para Resumen (default 900)
-- `FAQ_MAX_TOKENS` para FAQ (default 1200)
+### Componentes
 
-5. **Trazabilidad de contexto**
-- `data/debug_context_raw.txt` (consolidado original)
-- `data/debug_context.txt` (consolidado compacto)
+**`src/rag/indexer.py` — `KnowledgeIndexer`**
 
-Variables de control (`.env`):
+Lee todos los `.md` del knowledge base, extrae el frontmatter YAML como metadatos, divide el cuerpo con `TextChunker(max_chunk_size=1000, chunk_overlap=200)` y construye el índice ChromaDB con embeddings `text-embedding-3-small`. Incluye `_sanitize_metadata()` que convierte listas, fechas, `AnyHttpUrl` y `None` a tipos aceptados por ChromaDB (`str/int/float/bool`). El método `build_or_load(force=False)` detecta si el índice ya existe y lo carga sin re-indexar.
 
-- `RESPONSE_MAX_TOKENS` — tokens maximos en respuesta Q&A (default 500)
-- `SUMMARY_MAX_TOKENS` — tokens maximos en respuesta de Resumen (default 900)
-- `FAQ_MAX_TOKENS` — tokens maximos en respuesta de FAQ (default 1200)
-- `HISTORY_MAX_TURNS`
-- `HISTORY_MAX_CHARS`
-- `HISTORY_ITEM_MAX_CHARS`
-- `LINE_LEXICON_ENABLED`
-- `LINE_LEXICON_MIN_COUNT`
-- `LINE_LEXICON_MIN_LEN`
-- `LINE_LEXICON_MAX_ENTRIES`
+**`src/rag/retriever.py` — `KnowledgeRetriever`**
+
+Envuelve ChromaDB y expone `search(query, k, score_threshold)` que filtra los resultados por similitud mínima usando `similarity_search_with_relevance_scores`.
+
+**`src/app_agent/tools.py` — `retrieve_fvl_knowledge`**
+
+Herramienta LangChain (`@tool`) que el agente invoca durante el ciclo ReACT. Usa un singleton `_retriever` con lazy initialization. Llama a `retriever.search(query, k=rag_top_k, score_threshold=rag_score_threshold)` y formatea la salida con headers `[Fragmento N — slug (category)]` separados por `---`. Si no hay resultados, devuelve un mensaje literal para que el agente lo comunique al usuario sin inventar datos.
+
+**`src/app_agent/agent.py` — `build_rag_agent()`**
+
+Construye el agente usando `create_agent` de `langchain.agents` con:
+- Modelo `ChatOpenAI(temperature=0.1)` para respuestas deterministas.
+- `tools=[retrieve_fvl_knowledge]`.
+- `system_prompt` estricto que instruye al agente a siempre recuperar antes de responder, nunca inventar datos y citar fuentes con formato `DOC:<slug>`.
+- `checkpointer=InMemorySaver()` de LangGraph para memoria de sesión diferenciada por `thread_id`.
+
+**`src/app_agent/engine.py` — `get_rag_agent()` y `stream_agent_response()`**
+
+`get_rag_agent(force_rebuild=False)` es un singleton con lazy initialization. `force_rebuild=True` es útil tras re-indexar con `build-index --force`.
+
+`stream_agent_response(question, thread_id)` envía únicamente el mensaje actual al agente; el checkpointer recupera el historial del hilo automáticamente. Filtra el stream para emitir solo el `AIMessage` final, descartando `ToolMessage` intermedios y `AIMessage` con `tool_calls` pendientes.
+
+### Memoria de sesión
+
+El `thread_id` es un UUID generado en Streamlit una vez por sesión (`st.session_state.rag_thread_id`). Al limpiar el chat se regenera el UUID, iniciando un nuevo hilo aislado en el checkpointer. La UI mantiene `st.session_state.rag_messages` exclusivamente para renderizado — **no se pasa historial al backend**.
+
+### Comando CLI para indexar
+
+```powershell
+# Construir índice desde cero (primera vez o tras actualizar el knowledge base)
+uv run semantic-layer-fvl build-index
+
+# Forzar reconstrucción completa (descarta índice existente)
+uv run semantic-layer-fvl build-index --force
+```
+
+Salida esperada: `index_ready=True`, `chunks=N`, `chroma_dir=<ruta>`.
 
 ---
 
@@ -210,165 +205,184 @@ Variables de control (`.env`):
 ```text
 .
 ├── Makefile
-├── pyproject.toml
+├── pyproject.toml               ← requires-python = ">=3.11,<3.14"
+├── .python-version              ← 3.12 (pinned con uv)
 ├── .env.example
 ├── data/
-│   ├── knowledge/
+│   ├── knowledge/               ← generado por el pipeline ETL (gitignored)
 │   │   ├── 01_servicios/
 │   │   ├── 02_especialistas/
 │   │   ├── 03_sedes/
 │   │   ├── 04_institucional/
-│   │   ├── 09_noticias/          ← noticias curadas + Google News
-│   │   └── 10_multimedia/        ← videos YouTube enriquecidos
+│   │   ├── 09_noticias/
+│   │   └── 10_multimedia/
+│   ├── chroma_db/               ← índice vectorial ChromaDB (gitignored)
 │   ├── debug_context.txt
 │   └── debug_context_raw.txt
 ├── reports/
 │   └── runs/
 ├── src/
-│   ├── semantic_layer_fvl/
-│   │   ├── cli.py
+│   ├── semantic_layer_fvl/      ← pipeline ETL (Módulo 1 + 2)
+│   │   ├── cli.py               ← entry point CLI (incluye build-index)
 │   │   ├── domains.py
-│   │   ├── news_feeds.py         ← feeds curados + queries de busqueda
+│   │   ├── news_feeds.py
 │   │   ├── config/
+│   │   │   └── settings.py      ← Settings pydantic (RAG + LLM + HTTP)
 │   │   ├── extractors/
-│   │   │   ├── google_news.py    ← GoogleNewsFeedBuilder
-│   │   │   ├── youtube_rich.py   ← YouTubeRichExtractor (yt-dlp)
-│   │   │   ├── http_client.py    ← retry con backoff exponencial
+│   │   │   ├── web_crawler.py
+│   │   │   ├── youtube_rich.py
+│   │   │   ├── news.py
+│   │   │   ├── google_news.py
+│   │   │   ├── http_client.py
 │   │   │   └── ...
 │   │   ├── processors/
-│   │   │   ├── deduplicator.py   ← ContentDeduplicator
-│   │   │   ├── noise_presets.py  ← WEB_FVL_NOISE, NEWS_NOISE, YOUTUBE_NOISE
+│   │   │   ├── chunker.py       ← TextChunker usado por KnowledgeIndexer
+│   │   │   ├── cleaner.py
+│   │   │   ├── deduplicator.py
 │   │   │   └── ...
 │   │   ├── schemas/
 │   │   ├── writers/
 │   │   └── orchestrator/
-│   └── app/
-│       ├── engine.py             ← cadenas LCEL + stream_response()
-│       └── main.py               ← frontend profesional Streamlit
-└── tests/                        ← 88 tests (offline, sin llamadas reales)
-    ├── test_http_retry.py
-    ├── test_deduplicator.py
-    ├── test_youtube_rich.py
-    ├── test_google_news.py
-    ├── test_cleaner_presets.py
-    └── ...
+│   ├── rag/                     ← capa vectorial (Módulo 2)
+│   │   ├── indexer.py           ← KnowledgeIndexer + _sanitize_metadata()
+│   │   └── retriever.py         ← KnowledgeRetriever
+│   ├── app_agent/               ← agente RAG (Módulo 2)
+│   │   ├── tools.py             ← @tool retrieve_fvl_knowledge
+│   │   ├── agent.py             ← build_rag_agent() con checkpointer
+│   │   ├── engine.py            ← singleton + stream_agent_response()
+│   │   └── __init__.py
+│   └── app/                     ← dashboard Streamlit (Módulo 1 + 2)
+│       ├── engine.py            ← cadenas LCEL + stream_response()
+│       └── main.py              ← 4 pestañas (Q&A, Resumen, FAQ, Agente RAG)
+└── tests/                       ← ~105 tests (todos offline)
+    ├── test_rag_indexer.py      ← 9 tests KnowledgeIndexer
+    ├── test_rag_retriever.py    ← 6 tests KnowledgeRetriever
+    ├── test_rag_tools.py        ← 6 tests retrieve_fvl_knowledge
+    ├── test_rag_agent.py        ← 4 tests build_rag_agent
+    ├── test_rag_engine.py       ← 7 tests get_rag_agent + stream_agent_response
+    └── ...                      ← 88 tests existentes de Módulo 1
 ```
 
 ---
 
-## 8. Requisitos
+## 8. Stack Tecnológico
 
-- Python 3.11+
-- `uv` instalado
-- OpenAI API key para la app
-
-Opcional:
-
-- GNU make (en Windows puedes usar los comandos `uv run ...` directos)
+| Capa | Tecnología |
+|---|---|
+| Lenguaje | Python **3.12** (pinned; incompatible con 3.14 por pydantic + langchain legacy) |
+| Gestor de paquetes | `uv` |
+| LLM | `langchain 0.3` + `langchain-openai` + OpenAI `gpt-4o-mini` |
+| Embeddings | `text-embedding-3-small` via `langchain-openai` |
+| Agente | `create_agent` de `langchain.agents` |
+| Grafo / Memoria | `langgraph 1.0` — `InMemorySaver` checkpointer |
+| Vectorstore | `chromadb` + `langchain-chroma` |
+| Modelos de datos | `pydantic v2` + `pydantic-settings` |
+| HTTP | `httpx` con retry exponencial |
+| Scraping | `beautifulsoup4`, `markdownify` |
+| YouTube | `yt-dlp` (sin descarga de video) |
+| Dashboard | `streamlit` |
+| Linting | `ruff` (line-length: 110) |
+| Testing | `pytest` (~105 tests, todos offline) |
 
 ---
 
-## 9. Configuracion
+## 9. Requisitos
 
-### 9.1 Crear entorno local
+- Python 3.12 (no compatible con 3.14)
+- `uv` instalado
+- OpenAI API key
+
+---
+
+## 10. Configuración
+
+### 10.1 Crear entorno local
 
 ```powershell
 uv sync
 ```
 
-### 9.2 Configurar variables
+> Si Python 3.12 no está instalado: `uv python install 3.12` antes de `uv sync`.
+
+### 10.2 Configurar variables
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-Editar `.env` y definir al menos:
+Variables mínimas requeridas:
 
-- `OPENAI_API_KEY`
-- `OPENAI_MODEL`
-- `KNOWLEDGE_DIR=data/knowledge`
+```dotenv
+# LLM
+OPENAI_API_KEY=<tu_api_key>
+OPENAI_MODEL=gpt-4o-mini
 
-### 9.3 Verificar CLI
+# Rutas
+KNOWLEDGE_DIR=data/knowledge
+CHROMA_PERSIST_DIR=./data/chroma_db
+
+# RAG
+EMBEDDING_MODEL=text-embedding-3-small
+RAG_TOP_K=5
+RAG_SCORE_THRESHOLD=0.3
+AGENT_MAX_ITERATIONS=6
+
+# Presupuestos de inferencia (NO-RAG)
+RESPONSE_MAX_TOKENS=500
+SUMMARY_MAX_TOKENS=900
+FAQ_MAX_TOKENS=1200
+HISTORY_MAX_TURNS=6
+HISTORY_MAX_CHARS=3500
+HISTORY_ITEM_MAX_CHARS=700
+```
+
+### 10.3 Verificar instalación
 
 ```powershell
 uv run semantic-layer-fvl show-config
+uv run pytest -q
 ```
 
 ---
 
-## 10. Comandos Operativos
+## 11. Comandos Operativos
 
-### 10.1 Crawling por dominio
+### 11.1 Generar base de conocimiento (ETL)
 
 ```powershell
+# Dominios institucionales (obligatorio)
 uv run semantic-layer-fvl crawl-domain servicios --write
 uv run semantic-layer-fvl crawl-domain especialistas --write
 uv run semantic-layer-fvl crawl-domain sedes --write
 uv run semantic-layer-fvl crawl-domain institucional --write
-```
 
-Con limite:
-
-```powershell
+# Con límite de URLs
 uv run semantic-layer-fvl crawl-domain servicios --write --max-urls 50
-```
 
-### 10.2 Otros comandos CLI
-
-**Web FVL:**
-
-```powershell
-uv run semantic-layer-fvl crawl-once https://valledellili.org/quienes-somos --write
-uv run semantic-layer-fvl crawl-seeds --limit 10 --write --save-summary
-uv run semantic-layer-fvl crawl-discover --max-pages 50 --write --save-summary
-```
-
-**YouTube enriquecido** (usa yt-dlp; sin descarga de video):
-
-```powershell
-# Busqueda por keyword → metadatos + transcripciones → data/knowledge/10_multimedia/
+# Fuentes externas (opcional)
 uv run semantic-layer-fvl youtube-search "Fundacion Valle del Lili" --limit 20 --write
-
-# Multiples queries
-uv run semantic-layer-fvl youtube-search "FVL Cali" "trasplantes Colombia" --limit 10 --write
-
-# Feed oficial del canal (extractor ligero, sin transcripciones)
-uv run semantic-layer-fvl youtube-feed <feed_url> --write
+uv run semantic-layer-fvl news-curated --write
 ```
 
-**Noticias curadas** (medios locales + Google News RSS, sin auth):
+### 11.2 Construir índice vectorial (Módulo 2)
 
 ```powershell
-# Procesa feeds curados + Google News → data/knowledge/09_noticias/
-uv run semantic-layer-fvl news-curated --write
+# Primera vez o tras actualizar el knowledge base
+uv run semantic-layer-fvl build-index
 
-# Con articulo completo (hace fetch del cuerpo del medio, no solo el resumen RSS)
-uv run semantic-layer-fvl news-curated --write --fetch-full
-
-# Feed RSS personalizado
-uv run semantic-layer-fvl news-feed <feed_url> --write
+# Reconstruir desde cero (descarta índice existente)
+uv run semantic-layer-fvl build-index --force
 ```
 
-### 10.3 Dashboard Streamlit
+### 11.3 Iniciar dashboard
 
 ```powershell
 uv run streamlit run src/app/main.py
 ```
 
-La aplicacion abre en `http://localhost:8501` con layout wide y sidebar lateral.
+Abre en `http://localhost:8501`. La primera consulta a la pestaña **🤖 Agente RAG** inicializa el agente y carga ChromaDB (puede tomar unos segundos).
 
-**Sidebar**
-- Branding de la FVL, estado de carga del knowledge base, guia de uso y modelo activo.
-
-**Pestanas**
-
-- **💬 Q&A — Preguntas y Respuestas**: respuestas en streaming token a token via `chain.stream()`. Incluye panel de bienvenida con 5 preguntas de ejemplo clicables y boton para limpiar historial.
-- **📋 Resumen**: expander de temas sugeridos, formulario de tema libre, resultado con banner de identificacion y descarga en `.md`.
-- **❓ FAQ**: misma estructura que Resumen; genera 5-8 preguntas con respuestas fundamentadas en documentos.
-
-El CSS profesional aplica una paleta hospitalaria (azul `#002D72` / teal `#0077B5`) a tabs, botones, inputs y mensajes de chat.
-
-### 10.4 Atajos Makefile
+### 11.4 Atajos Makefile
 
 ```powershell
 make servicios
@@ -380,9 +394,7 @@ make app
 
 ---
 
-## 11. Replicar en Otro Equipo
-
-Esta seccion esta pensada para levantar el proyecto desde cero en una maquina nueva.
+## 12. Replicar en Otro Equipo
 
 ### Paso 1. Clonar el repositorio
 
@@ -394,6 +406,7 @@ cd Fundacion_Valle_Lili_V1
 ### Paso 2. Instalar dependencias
 
 ```powershell
+uv python install 3.12   # si no está instalado
 uv sync
 ```
 
@@ -401,162 +414,104 @@ uv sync
 
 ```powershell
 Copy-Item .env.example .env
+# Editar y completar OPENAI_API_KEY y demás variables
 ```
 
-Valores minimos recomendados:
-
-```dotenv
-# Requerido para la app
-OPENAI_API_KEY=<tu_api_key>
-OPENAI_MODEL=gpt-4o-mini
-KNOWLEDGE_DIR=data/knowledge
-
-# Presupuestos de inferencia
-RESPONSE_MAX_TOKENS=500
-SUMMARY_MAX_TOKENS=900
-FAQ_MAX_TOKENS=1200
-HISTORY_MAX_TURNS=6
-HISTORY_MAX_CHARS=3500
-HISTORY_ITEM_MAX_CHARS=700
-
-# Compactacion de contexto
-LINE_LEXICON_ENABLED=true
-LINE_LEXICON_MIN_COUNT=5
-LINE_LEXICON_MIN_LEN=24
-LINE_LEXICON_MAX_ENTRIES=350
-
-# Retry HTTP
-MAX_RETRIES=2
-
-# YouTube enriquecido (opcional)
-YOUTUBE_SEARCH_LIMIT=20
-YOUTUBE_TRANSCRIPT_LANGUAGES=["es","es-419","en"]
-
-# Noticias curadas (opcional)
-NEWS_CURATED_ENABLED=true
-NEWS_FETCH_FULL_ARTICLE=false
-NEWS_FEED_LIMIT=50
-```
-
-### Paso 4. Verificar instalacion
-
-```powershell
-uv run semantic-layer-fvl show-config
-uv run pytest -q
-```
-
-### Paso 5. Generar base de conocimiento
-
-**Fuentes oficiales FVL** (obligatorio):
+### Paso 4. Generar base de conocimiento
 
 ```powershell
 uv run semantic-layer-fvl crawl-domain servicios --write
 uv run semantic-layer-fvl crawl-domain especialistas --write
 uv run semantic-layer-fvl crawl-domain sedes --write
 uv run semantic-layer-fvl crawl-domain institucional --write
-```
 
-**Fuentes externas** (opcional, amplia el corpus):
-
-```powershell
-# Videos YouTube con metadatos y transcripciones
+# Opcional
 uv run semantic-layer-fvl youtube-search "Fundacion Valle del Lili" --limit 20 --write
-
-# Noticias de medios locales + Google News RSS
 uv run semantic-layer-fvl news-curated --write
 ```
 
-### Paso 6. Iniciar app
+### Paso 5. Construir el índice vectorial
 
 ```powershell
+uv run semantic-layer-fvl build-index
+```
+
+### Paso 6. Verificar e iniciar
+
+```powershell
+uv run pytest -q
 uv run streamlit run src/app/main.py
 ```
 
-### Paso 7. Validar contexto cargado
-
-Al iniciar la app, revisar que se generen:
-
-- `data/debug_context_raw.txt`
-- `data/debug_context.txt`
-
-Puedes medir compactacion:
-
-```powershell
-uv run python -c "import pathlib; raw=pathlib.Path('data/debug_context_raw.txt').stat().st_size; comp=pathlib.Path('data/debug_context.txt').stat().st_size; print(round(((raw-comp)/raw)*100,2))"
-```
-
 ---
 
-## 12. Testing
+## 13. Testing
 
-Ejecutar toda la suite (88 tests, todos offline):
+Suite completa (~105 tests, todos offline):
 
 ```powershell
 uv run pytest
-uv run pytest -q   # salida compacta
+uv run pytest -q    # salida compacta
 ```
 
-Cobertura:
-
-| Archivo de test | Que cubre |
+| Archivo de test | Qué cubre |
 |---|---|
+| `test_rag_indexer.py` | `KnowledgeIndexer`: frontmatter, sanitización de metadatos, carga de documentos, `build_or_load`, `_drop_collection` |
+| `test_rag_retriever.py` | `KnowledgeRetriever`: filtro por threshold, parámetro k, casos vacíos, boundary exacto |
+| `test_rag_tools.py` | `retrieve_fvl_knowledge`: metadata tool, sin resultados, formato headers con/sin categoría, separador, parámetros de settings |
+| `test_rag_agent.py` | `build_rag_agent`: retorno del agente, tool correcta, `InMemorySaver` presente, temperatura 0.1 |
+| `test_rag_engine.py` | `get_rag_agent` singleton + `force_rebuild`; `stream_agent_response`: filtro de mensajes, `thread_id` en config, manejo de excepciones |
 | `test_settings.py` | Config y variables de entorno |
 | `test_schemas.py` | Modelos Pydantic |
-| `test_crawler.py` | WebCrawler y reglas de limpieza |
-| `test_pipeline.py` | SemanticPipeline |
-| `test_cli.py` | Comandos CLI |
-| `test_http_retry.py` | Retry con backoff exponencial (503, 429, timeout) |
-| `test_deduplicator.py` | Deduplicacion por URL canonica y checksum SHA-256 |
-| `test_youtube_rich.py` | YouTubeRichExtractor con mock de yt-dlp |
-| `test_google_news.py` | Construccion de URL RSS de Google News |
-| `test_cleaner_presets.py` | Presets de ruido (WEB_FVL, NEWS, YOUTUBE) |
-
-Todos los tests usan mocks de httpx y yt-dlp — no se realizan llamadas reales a YouTube ni a Google News.
+| `test_web_crawler.py` | WebCrawler, selectors CSS, conversión HTML→MD |
+| `test_pipeline.py` | `SemanticPipeline` end-to-end |
+| `test_cli.py` | Comandos CLI y argumentos |
+| `test_http_retry.py` | Retry exponencial (503, 429, timeout) |
+| `test_deduplicator.py` | Deduplicación por URL canónica y SHA-256 |
+| `test_youtube_rich.py` | `YouTubeRichExtractor` con mock de yt-dlp |
+| `test_google_news.py` | Construcción de URLs RSS Google News |
+| `test_cleaner_presets.py` | Presets WEB_FVL, NEWS, YOUTUBE |
 
 ---
 
-## 13. Troubleshooting Rapido
+## 14. Troubleshooting
 
-1. `program not found: semantic-layer-fvl`
-- Ejecuta `uv sync`.
-- Usa `uv run semantic-layer-fvl ...` dentro de la raiz del repo.
+**`program not found: semantic-layer-fvl`**
+Ejecuta `uv sync` en la raíz del repo.
 
-2. La app responde lento o caro en tokens
-- Baja `RESPONSE_MAX_TOKENS` (Q&A), `SUMMARY_MAX_TOKENS` (Resumen) o `FAQ_MAX_TOKENS` (FAQ).
-- Ajusta `HISTORY_MAX_*` para reducir tokens del historial en Q&A.
-- Mantiene `KNOWLEDGE_DIR=data/knowledge`.
+**La app RAG responde lento en la primera consulta**
+Normal: la primera llamada inicializa el agente y carga ChromaDB. Las siguientes son instantáneas.
 
-3. Error por API key
-- Verifica `OPENAI_API_KEY` en `.env`.
-- Reinicia proceso de Streamlit despues de cambiar variables.
+**`index_ready=False` o `chunks=0`**
+Ejecuta `uv run semantic-layer-fvl build-index --force`. Verifica que `data/knowledge/` tenga archivos `.md` (ejecutar primero el pipeline ETL).
 
-4. No aparecen documentos en salida
-- Ejecuta `crawl-domain ... --write`.
-- Verifica permisos de escritura en `data/knowledge`.
+**`OPENAI_API_KEY` no encontrada en runtime**
+La librería OpenAI lee `os.environ`, no el objeto `Settings`. La API key debe estar en `.env` y es leída por pydantic-settings. No funciona si se define solo como variable de entorno del sistema operativo sin `.env`.
 
----
+**El agente responde sin recuperar documentos**
+Aumentar `RAG_SCORE_THRESHOLD` (default 0.3) o bajar `RAG_TOP_K` para ser más selectivo. Revisar que el índice tenga chunks con `uv run semantic-layer-fvl build-index`.
 
-## 14. Seguridad y Buenas Practicas
+**El Módulo 1 (Q&A/Resumen/FAQ) responde lento o es costoso**
+Bajar `RESPONSE_MAX_TOKENS`, `SUMMARY_MAX_TOKENS` o `FAQ_MAX_TOKENS`. Ajustar `HISTORY_MAX_*` para reducir tokens del historial.
 
-- No subir `.env` al repositorio.
-- No exponer llaves API en capturas o logs.
-- Mantener scraping solo sobre contenido publico institucional.
+**`TypeError: 'function' object is not subscriptable` en tests**
+El proyecto usa Python 3.12 obligatoriamente. Python 3.14 es incompatible con `langchain.agents` + pydantic. Ejecutar `uv python pin 3.12` y `uv sync`.
 
 ---
 
-## 15. Estado del Modulo
+## 15. Seguridad y Buenas Prácticas
 
-**Iteracion 1 (base):** pipeline de extraccion web para `valledellili.org` (4 dominios) + dashboard Streamlit NO-RAG con tres cadenas LangChain LCEL (Q&A, Resumen, FAQ) y optimizaciones de costo de inferencia.
+- No subir `.env`, `data/` ni `reports/` al repositorio (todos en `.gitignore`).
+- No exponer API keys en capturas o logs.
+- Mantener scraping solo sobre contenido público institucional.
+- `InMemorySaver` almacena el historial en memoria del proceso — se pierde al reiniciar la app. Para persistencia entre reinicios, reemplazar por `SqliteSaver` o `PostgresSaver` de LangGraph.
 
-**Iteracion 2 (fuentes externas):**
+---
 
-- YouTubeRichExtractor con yt-dlp: metadatos, transcripciones VTT/json3 y busqueda por keyword.
-- Noticias curadas: 7 feeds RSS de medios locales (El Tiempo, El Pais, Semana, El Espectador, Caracol, Blu, RCN) + Google News RSS por keyword.
-- ContentDeduplicator: deduplicacion cross-source por URL canonica y checksum SHA-256.
-- TextCleaner configurable con presets de ruido por tipo de fuente.
-- HttpClient con retry exponencial (respeta `Retry-After`).
-- Campos de frontmatter extendidos: `source_type`, `external_id`, `published_at`.
-- Frontend Streamlit rediseñado: layout wide, sidebar, CSS profesional, streaming en Q&A.
-- 88 tests unitarios offline.
+## 16. Estado del Módulo
 
-**Siguiente paso natural (Modulo 2):** evolucionar a recuperacion selectiva por documentos/chunks (RAG). El modulo `TextChunker` en `processors/chunker.py` ya esta implementado y reservado para esa fase.
+| Iteración | Estado | Contenido |
+|---|---|---|
+| Iteración 1 | ✅ Completa | Pipeline web (4 dominios) + dashboard NO-RAG (Q&A, Resumen, FAQ) + context stuffing con compactación de contexto |
+| Iteración 2 | ✅ Completa | YouTubeRichExtractor, noticias curadas, deduplicación, retry HTTP, presets de ruido, streaming LCEL, CSS profesional |
+| Módulo 2 — RAG | ✅ Completa | `KnowledgeIndexer`, `KnowledgeRetriever`, `@tool retrieve_fvl_knowledge`, agente ReACT con `InMemorySaver`, pestaña Agente RAG en Streamlit, suite de tests offline, comando CLI `build-index` |

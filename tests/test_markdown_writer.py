@@ -1,4 +1,6 @@
 from pathlib import Path
+from typing import cast
+from pydantic import AnyHttpUrl
 
 from semantic_layer_fvl.config.settings import Settings
 from semantic_layer_fvl.schemas import DocumentCategory, ExtractionMetadata, ProcessedDocument, SourceDocument
@@ -7,7 +9,7 @@ from semantic_layer_fvl.writers import MarkdownWriter
 
 def build_processed_document() -> ProcessedDocument:
     metadata = ExtractionMetadata(
-        source_url="https://valledellili.org/servicios/cardiologia",
+        source_url=cast(AnyHttpUrl, "https://valledellili.org/servicios/cardiologia"),
         source_name="Fundacion Valle del Lili",
         extractor_name="test-writer",
         http_status=200,
@@ -18,7 +20,7 @@ def build_processed_document() -> ProcessedDocument:
         title="Servicio de Cardiologia",
         slug="cardiologia",
         category=DocumentCategory.SERVICIOS,
-        source_url="https://valledellili.org/servicios/cardiologia",
+        source_url=cast(AnyHttpUrl, "https://valledellili.org/servicios/cardiologia"),
         source_name="Fundacion Valle del Lili",
         summary="Atencion cardiovascular integral.",
         extraction_metadata=metadata,
@@ -35,7 +37,7 @@ def test_markdown_writer_renders_frontmatter() -> None:
 
 
 def test_markdown_writer_resolves_document_path_by_category(workspace_tmp_path: Path) -> None:
-    settings = Settings(output_dir=workspace_tmp_path)
+    settings = Settings(knowledge_dir=workspace_tmp_path)
     writer = MarkdownWriter(settings)
 
     output_path = writer.resolve_output_path(build_processed_document())

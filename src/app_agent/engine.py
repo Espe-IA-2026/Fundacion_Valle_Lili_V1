@@ -40,19 +40,20 @@ def get_rag_agent(force_rebuild: bool = False):
 
 def stream_agent_response(
     question: str,
-    history: list[dict],
+    thread_id: str,
 ) -> Iterator[str]:
     """Genera la respuesta del agente fragmento a fragmento para streaming en Streamlit.
 
-    Construye la lista de mensajes combinando el historial previo con la
-    pregunta actual, ejecuta el agente en modo stream y filtra únicamente
-    la respuesta final, descartando los pasos intermedios de tool calls y
-    resultados de herramientas.
+    Envía únicamente el mensaje actual al agente; el checkpointer recupera
+    el historial del hilo identificado por ``thread_id`` de forma automática.
+    Filtra los pasos intermedios (tool calls y ToolMessages) y emite solo
+    la respuesta final del LLM.
 
     Args:
         question: Pregunta actual del usuario.
-        history: Historial de conversación en formato Streamlit:
-            ``[{"role": "user"|"assistant", "content": "..."}]``.
+        thread_id: Identificador UUID de la sesión de conversación.
+            El checkpointer usa este valor para aislar y recuperar el
+            historial de cada sesión sin necesidad de pasarlo manualmente.
 
     Yields:
         Texto de la respuesta final del agente. Con ``stream_mode="values"``
@@ -60,11 +61,13 @@ def stream_agent_response(
         termina de razonar.
     """
     agent = get_rag_agent()
-    messages = _build_messages(question, history)
+    messages = [{"role": "user", "content": question}]
+    config = {"configurable": {"thread_id": thread_id}}
 
     try:
         for step in agent.stream(
             {"messages": messages},
+            config,
             stream_mode="values",
         ):
             last_msg = step["messages"][-1]
@@ -88,23 +91,3 @@ def stream_agent_response(
             "Lo siento, ocurrió un error al procesar tu consulta. "
             "Por favor intenta de nuevo."
         )
-
-
-def _build_messages(question: str, history: list[dict]) -> list[dict]:
-    """Construye la lista de mensajes combinando historial y pregunta actual.
-
-    Args:
-        question: Pregunta del turno actual.
-        history: Mensajes previos en formato ``[{"role": ..., "content": ...}]``.
-
-    Returns:
-        Lista de mensajes lista para pasar al agente, con la pregunta
-        actual como último elemento.
-    """
-    messages = [
-        {"role": msg["role"], "content": str(msg["content"]).strip()}
-        for msg in history
-        if msg.get("content", "").strip()
-    ]
-    messages.append({"role": "user", "content": question})
-    return messages

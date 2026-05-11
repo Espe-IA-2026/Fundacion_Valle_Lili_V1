@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import re
 import shutil
-from pathlib import Path
 
 import yaml
 from langchain_chroma import Chroma
@@ -28,7 +27,10 @@ class KnowledgeIndexer:
         settings = get_settings()
         self._knowledge_dir = settings.resolved_knowledge_dir
         self._chroma_dir = settings.resolved_chroma_persist_dir
-        self._embeddings = OpenAIEmbeddings(model=settings.embedding_model)
+        self._embeddings = OpenAIEmbeddings(
+            model=settings.embedding_model,
+            api_key = settings.openai_api_key,
+        )
         self._chunker = TextChunker(max_chunk_size=1000, chunk_overlap=200)
         self._db: Chroma | None = None
 
@@ -81,6 +83,18 @@ class KnowledgeIndexer:
             logger.info("Colección ChromaDB eliminada para re-indexar.")
 
     def _load_documents(self) -> list[Document]:
+        """Carga todos los archivos .md del knowledge base y los fragmenta en chunks.
+
+        Para cada archivo: extrae el frontmatter YAML, sanitiza los metadatos
+        para compatibilidad con ChromaDB, divide el cuerpo en chunks solapados
+        y construye un objeto ``Document`` por cada fragmento.
+
+        Returns:
+            Lista de ``Document`` con contenido y metadatos listos para indexar.
+
+        Raises:
+            ValueError: Si no hay archivos ``.md`` en ``knowledge_dir``.
+        """
         md_files = list(self._knowledge_dir.rglob("*.md"))
         if not md_files:
             raise ValueError(
@@ -92,7 +106,8 @@ class KnowledgeIndexer:
         docs: list[Document] = []
         for path in md_files:
             raw = path.read_text(encoding="utf-8")
-            metadata = self._parse_frontmatter(raw)
+            raw_metadata = self._parse_frontmatter(raw)
+            metadata = self._sanitize_metadata(raw_metadata)
             body = _FRONTMATTER_RE.sub("", raw).strip()
             chunks = self._chunker.chunk(body)
             for i, chunk in enumerate(chunks):
@@ -101,6 +116,42 @@ class KnowledgeIndexer:
                     metadata={**metadata, "chunk_index": i, "source_file": str(path)},
                 ))
         return docs
+
+    def _sanitize_metadata(self, raw: dict) -> dict:
+        """Convierte los valores del frontmatter a tipos aceptados por ChromaDB.
+
+        ChromaDB solo acepta ``str``, ``int``, ``float`` y ``bool`` como valores
+        de metadata. Este método normaliza los tipos problemáticos:
+
+        - Listas no vacías → string separado por comas.
+        - Listas vacías → se omiten.
+        - ``None`` → se omite.
+        - ``datetime``, ``AnyHttpUrl`` y otros objetos → ``str(valor)``.
+
+        Args:
+            raw: Diccionario de metadata tal como lo devuelve ``_parse_frontmatter``.
+
+        Returns:
+            Diccionario con solo tipos escalares aceptados por ChromaDB.
+        """
+        sanitized: dict = {}
+        for key, value in raw.items():
+            if value is None:
+                continue
+            if isinstance(value, list):
+                if value:
+                    sanitized[key] = ", ".join(str(v) for v in value)
+                # lista vacía → se omite
+            elif isinstance(value, bool):
+                sanitized[key] = value
+            elif isinstance(value, (int, float)):
+                sanitized[key] = value
+            elif isinstance(value, str):
+                sanitized[key] = value
+            else:
+                # datetime, AnyHttpUrl, objetos Pydantic, etc.
+                sanitized[key] = str(value)
+        return sanitized
 
     def _parse_frontmatter(self, raw: str) -> dict:
         match = _FRONTMATTER_FIELDS_RE.match(raw)

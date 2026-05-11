@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import logging
-import os
 
 from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
-from pydantic import SecretStr
+from langgraph.checkpoint.memory import InMemorySaver
+
 
 from app_agent.tools import retrieve_fvl_knowledge
+from semantic_layer_fvl.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -48,17 +49,17 @@ def build_rag_agent():
         Agente compilado listo para invocar con ``.invoke()`` o transmitir
         con ``.stream()``. La entrada esperada es un dict con clave ``messages``.
     """
-    api_key = os.getenv("OPENAI_API_KEY")
+    settings = get_settings()
     model = ChatOpenAI(
-        model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+        model=settings.openai_model,
         temperature=0.1,
-        api_key=SecretStr(api_key) if api_key else None,
+        api_key=settings.openai_api_key,
     )
-
     agent = create_agent(
         model,
         tools=[retrieve_fvl_knowledge],
         system_prompt=_AGENT_SYSTEM_PROMPT,
+        checkpointer=InMemorySaver(),
     )
 
     logger.info("Agente RAG construido correctamente.")

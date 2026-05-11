@@ -7,6 +7,7 @@ Pestañas disponibles:
 """
 
 import os
+import uuid
 
 import streamlit as st
 from dotenv import load_dotenv
@@ -20,6 +21,7 @@ from app.engine import (
     load_knowledge_base,
     stream_response,
 )
+from app_agent.engine import stream_agent_response
 
 load_dotenv()
 
@@ -262,7 +264,7 @@ def _render_sidebar(knowledge_loaded: bool = True) -> None:
                 </div>
                 <div style="font-size:0.74rem; color:#5B6475; margin-top:0.3rem;
                             letter-spacing:0.04em; text-transform:uppercase;">
-                    Asistente Virtual · Módulo 1
+                    Asistente Virtual · Módulo 1+2
                 </div>
             </div>
             <hr style="border-color:#D1D9E0; margin:0.5rem 0 1rem;">
@@ -293,6 +295,11 @@ def _render_sidebar(knowledge_loaded: bool = True) -> None:
             **❓ FAQ**
             Genera las preguntas más frecuentes sobre un tema, con respuestas basadas
             en los documentos oficiales.
+
+            **🤖 Agente RAG**
+            Agente con recuperación semántica dinámica. Consulta el índice vectorial
+            para responder con fragmentos exactos de los documentos institucionales.
+            Mantiene memoria de la sesión activa.
             """,
             help=None,
         )
@@ -310,8 +317,8 @@ def _render_sidebar(knowledge_loaded: bool = True) -> None:
         )
 
         st.divider()
-        st.caption("Módulo 1 — Context Stuffing · GPT-4o-mini")
-        st.caption("Fundación Valle del Lili · 2024–2025")
+        st.caption("Módulo 1 — Context Stuffing · Módulo 2 — RAG")
+        st.caption("GPT-4o-mini · Fundación Valle del Lili · 2024–2025")
 
 
 def _render_qa_tab(qa_chain, context: str) -> None:
@@ -531,6 +538,93 @@ def _render_faq_tab(faq_chain, context: str) -> None:
         )
 
 
+def _render_rag_tab() -> None:
+    """Renderiza la pestaña del agente RAG con memoria de sesión y streaming.
+
+    Genera un UUID de sesión al inicio y lo persiste en ``st.session_state``
+    como ``rag_thread_id``. Los mensajes para visualización se guardan en
+    ``rag_messages`` (presentación pura). El agente gestiona su propia memoria
+    internamente mediante el checkpointer — no se pasa historial al backend.
+
+    Al limpiar la conversación se regenera el UUID, iniciando un nuevo hilo
+    aislado en el checkpointer sin afectar sesiones anteriores.
+    """
+    if "rag_thread_id" not in st.session_state:
+        st.session_state.rag_thread_id = str(uuid.uuid4())
+    if "rag_messages" not in st.session_state:
+        st.session_state.rag_messages: list[dict] = []
+
+    col_title, col_btn = st.columns([7, 1])
+    with col_title:
+        st.subheader("Agente RAG — Recuperación semántica")
+        st.caption(
+            "Recuperación dinámica desde el índice vectorial ChromaDB · "
+            "El agente decide qué fragmentos usar en cada respuesta."
+        )
+    with col_btn:
+        st.markdown("<div style='margin-top:1.4rem;'></div>", unsafe_allow_html=True)
+        if st.session_state.get("rag_messages"):
+            if st.button("🗑️ Limpiar", key="clear_rag", help="Borrar conversación y reiniciar sesión"):
+                st.session_state.rag_messages = []
+                st.session_state.rag_thread_id = str(uuid.uuid4())
+                st.rerun()
+
+    # Panel de bienvenida con ejemplos cuando el chat está vacío
+    if not st.session_state.rag_messages:
+        st.markdown(
+            """
+            <div style="
+                background: linear-gradient(135deg, #EBF5FB 0%, #F0F7FF 100%);
+                border: 1px solid #C5D9EC;
+                border-left: 4px solid #0077B5;
+                border-radius: 10px;
+                padding: 1rem 1.25rem 0.75rem;
+                margin: 0.5rem 0 1rem;
+            ">
+                <p style="margin:0 0 0.4rem; font-weight:700; color:#002D72; font-size:0.95rem;">
+                    🤖 Agente con recuperación semántica activa
+                </p>
+                <p style="margin:0; color:#5B6475; font-size:0.85rem;">
+                    Este agente consulta dinámicamente el índice vectorial para responder con
+                    fragmentos exactos de los documentos oficiales. Prueba una de estas consultas:
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        cols = st.columns(len(_EXAMPLE_QUERIES))
+        for col, query in zip(cols, _EXAMPLE_QUERIES):
+            with col:
+                if st.button(query, key=f"rag_ex_{hash(query)}", use_container_width=True):
+                    st.session_state["_rag_pending"] = query
+                    st.rerun()
+
+        st.markdown("")
+
+    # Renderizar historial de visualización
+    for msg in st.session_state.rag_messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    # Input: mensaje del usuario o ejemplo pendiente
+    user_input = st.chat_input("Consulta al agente RAG…", key="rag_input")
+    if "_rag_pending" in st.session_state:
+        user_input = st.session_state.pop("_rag_pending")
+
+    if user_input:
+        st.session_state.rag_messages.append({"role": "user", "content": user_input})
+        with st.chat_message("user"):
+            st.markdown(user_input)
+
+        with st.chat_message("assistant"):
+            response = st.write_stream(
+                stream_agent_response(user_input, st.session_state.rag_thread_id)
+            )
+
+        st.session_state.rag_messages.append({"role": "assistant", "content": response})
+
+
 def main() -> None:
     """Punto de entrada del dashboard Streamlit de la FVL.
 
@@ -568,8 +662,8 @@ def main() -> None:
         unsafe_allow_html=True,
     )
 
-    tab_qa, tab_summary, tab_faq = st.tabs(
-        ["💬  Q&A — Preguntas y Respuestas", "📋  Resumen", "❓  FAQ"]
+    tab_qa, tab_summary, tab_faq, tab_rag = st.tabs(
+        ["💬  Q&A — Preguntas y Respuestas", "📋  Resumen", "❓  FAQ", "🤖  Agente RAG"]
     )
 
     with tab_qa:
@@ -580,6 +674,9 @@ def main() -> None:
 
     with tab_faq:
         _render_faq_tab(faq_chain, context)
+
+    with tab_rag:
+        _render_rag_tab()
 
 
 if __name__ == "__main__":

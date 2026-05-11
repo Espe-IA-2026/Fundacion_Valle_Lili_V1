@@ -3,7 +3,7 @@ name = "chatbot-fvl"
 version = "1.0.0"
 description = "Módulo 1 — Chatbot corporativo para la Fundación Valle del Lili (Context Stuffing, sin RAG)."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.14"
 dependencies = [
     "beautifulsoup4>=4.12,<5.0",
     "httpx>=0.27,<1.0",
@@ -13,13 +13,12 @@ dependencies = [
     "pydantic-settings>=2.10,<3.0",
     "markdownify>=0.12,<1.0",
     "yt-dlp>=2024.10.0",
-    "langchain>=0.3,<0.4",
-    "langchain-openai>=0.2,<0.3",
     "openai>=1.40,<2.0",
     "streamlit>=1.35,<2.0",
     "chromadb>=1.5.9",
-    "langchain-chroma>=0.2.6",
-    "langgraph>=1.0.1",
+    "langchain>=1.2.18",
+    "langchain-chroma>=1.1.0",
+    "langchain-openai>=1.1.9",
 ]
 
 [dependency-groups]

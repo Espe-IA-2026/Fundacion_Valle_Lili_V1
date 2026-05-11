@@ -6,7 +6,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import AnyHttpUrl, Field
+from pydantic import AnyHttpUrl, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -28,6 +28,8 @@ class Settings(BaseSettings):
 
     # Módulo 2 — RAG
     embedding_model: str = "text-embedding-3-small"
+    openai_api_key: SecretStr | None = None
+    openai_model: str = "gpt-5-nano"
     rag_top_k: int = Field(default=5, ge=1)
     rag_score_threshold: float = Field(default=0.3, ge=0.0, le=1.0)
     agent_max_iterations: int = Field(default=6, ge=1)
