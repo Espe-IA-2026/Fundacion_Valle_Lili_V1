@@ -204,8 +204,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Guarda el resumen de corrida en el directorio de runs.",
     )
-    return parser
-
+    build_index_parser = subparsers.add_parser(
+        "build-index",
+        help="Construye o recarga el índice vectorial ChromaDB desde los documentos Markdown.",
+    )
+    build_index_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Elimina el índice existente y re-indexa todos los documentos.",
+    )
+    return parser    
 
 def handle_show_config() -> int:
     """Muestra la configuracion cargada desde variables de entorno."""
@@ -374,7 +382,37 @@ def handle_run_all(
     print_summary(summary, summary_path=summary_path)
     return 0 if summary.failure_count == 0 else 1
 
+def handle_build_index(*, force: bool) -> int:
+    """Construye o recarga el índice vectorial ChromaDB.
 
+    Carga todos los archivos ``.md`` del directorio de conocimiento,
+    los divide en chunks con ``TextChunker`` y los vectoriza con
+    ``OpenAIEmbeddings`` en ChromaDB. Si el índice ya existe y ``force``
+    es ``False``, lo carga sin re-indexar.
+
+    Args:
+        force: Si ``True``, elimina el índice existente y re-indexa todo.
+            Útil cuando el knowledge base fue actualizado con nuevos documentos.
+
+    Returns:
+        ``0`` si el índice fue construido o cargado exitosamente, ``1`` si
+        ocurrió un error.
+    """
+    from rag.indexer import KnowledgeIndexer
+
+    try:
+        indexer = KnowledgeIndexer()
+        indexer.build_or_load(force=force)
+        print(f"index_ready=True")
+        print(f"chunks={indexer.chunk_count}")
+        print(f"chroma_dir={indexer._chroma_dir}")
+        return 0
+    except ValueError as exc:
+        print(f"error={exc}")
+        print("Asegúrate de haber ejecutado el pipeline ETL primero:")
+        print("  uv run semantic-layer-fvl crawl-domain servicios --write")
+        return 1
+    
 def main() -> int:
     """Punto de entrada de la CLI."""
 
@@ -432,9 +470,10 @@ def main() -> int:
             write=args.write,
             save_summary=args.save_summary,
         )
+    if args.command == "build-index":
+        return handle_build_index(force=args.force)
     parser.print_help()
     return 1
-
 
 if __name__ == "__main__":
     raise SystemExit(main())
