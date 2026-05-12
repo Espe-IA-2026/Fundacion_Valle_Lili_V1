@@ -126,5 +126,5 @@ class TextChunker:
 
         if current:
             chunks.append(current)
-
         return chunks
+        
