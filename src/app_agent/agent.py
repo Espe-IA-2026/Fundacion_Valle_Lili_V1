@@ -8,7 +8,6 @@ from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import InMemorySaver
 
-
 from app_agent.tools import get_fvl_structured_info, retrieve_fvl_knowledge
 from semantic_layer_fvl.config import get_settings
 
@@ -43,7 +42,7 @@ _AGENT_SYSTEM_PROMPT = (
     "   nunca retrieve_fvl_knowledge, ya que esta información vive en el JSON estructurado.\n"
     "3. Elige la herramienta según el tipo de consulta. Si combina datos concretos Y narrativa,\n"
     "   invoca ambas herramientas.\n"
-    "4. Basa tu respuesta ÚNCICAMENTE en la información recuperada por la(s) herramienta(s).\n"
+    "4. Basa tu respuesta ÚNICAMENTE en la información recuperada por la(s) herramienta(s).\n"
     "5. Si ninguna herramienta devuelve información relevante, responde EXACTAMENTE:\n"
     "   'No encontré esa información en los documentos institucionales disponibles.'\n"
     "6. NUNCA inventes datos como fechas, nombres, precios, horarios o teléfonos que no\n"

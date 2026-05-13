@@ -43,10 +43,14 @@ def _get_retriever() -> KnowledgeRetriever:
 def retrieve_fvl_knowledge(query: str) -> str:
     """Busca información institucional de la Fundación Valle del Lili (FVL).
 
-    Usa esta herramienta para cualquier pregunta sobre servicios médicos,
-    especialidades, sedes, procedimientos, horarios, contactos o datos
-    institucionales de la FVL. Devuelve fragmentos de documentos oficiales
-    relevantes para la consulta.
+    Usa esta herramienta para preguntas abiertas sobre servicios médicos,
+    especialidades, procedimientos clínicos, tratamientos, programas
+    institucionales o contexto narrativo de la FVL. Devuelve fragmentos de
+    documentos oficiales relevantes para la consulta.
+
+    No uses esta herramienta para datos estructurados como EPS, convenios,
+    aseguradoras, métodos de pago, teléfonos, horarios, sedes o preguntas
+    frecuentes directas; para esas consultas usa get_fvl_structured_info.
 
     Args:
         query: Pregunta o tema a buscar en la base de conocimiento.

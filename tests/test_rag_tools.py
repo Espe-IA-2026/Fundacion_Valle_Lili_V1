@@ -6,7 +6,6 @@ from unittest.mock import MagicMock, patch
 
 from langchain_core.documents import Document
 
-
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 
@@ -65,7 +64,8 @@ def test_retrieve_retorna_mensaje_cuando_no_hay_resultados() -> None:
 def test_retrieve_formatea_fragmento_con_slug_y_categoria() -> None:
     """retrieve_fvl_knowledge incluye slug y categoría en el header del fragmento.
 
-    El header permite al agente citar la fuente en el formato DOC:<slug>.
+    El header permite al agente citar la fuente con la categoría limpia,
+    sin prefijos numéricos internos como ``01_``.
     """
     mock_retriever = MagicMock()
     mock_retriever.search.return_value = [
