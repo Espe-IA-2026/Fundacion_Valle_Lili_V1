@@ -1,20 +1,98 @@
- {
-    "contactos": {
-      "central": "+57 (2) 331 7000",
-      "urgencias": "+57 (2) 331 7001",
-      "email": "info@valledellili.org"
+{
+  "informacion_corporativa": {
+    "nombre_legal": "Fundación Valle del Lili",
+    "nit": "890.327.251-8",
+    "naturaleza_juridica": "Entidad privada sin ánimo de lucro",
+    "pagina_web": "https://valledellili.org",
+    "ranking_reputacion": "Mejor clínica de Colombia y top 4 en Latinoamérica según América Economía.",
+    "acreditaciones": [
+      "Acreditación en Salud con Excelencia (MinSalud)",
+      "Joint Commission International (JCI)",
+      "Certificación como Hospital Universitario"
+    ]
+  },
+  "contactos_clave": {
+    "central_telefonica": "+57 (2) 331 7000",
+    "urgencias_directo": "+57 (2) 331 7001",
+    "citas_medicas": "+57 (2) 331 9090",
+    "whatsapp_citas": "+57 318 331 9090",
+    "email_informacion": "info@valledellili.org",
+    "email_pqrs_quejas": "servicioalcliente@fvl.org.co",
+    "extension_objetos_perdidos": "3100"
+  },
+  "horarios_atencion": {
+    "urgencias": "Atención 24 horas, 7 días a la semana",
+    "consulta_externa": "Lunes a viernes 7:00 AM – 5:00 PM, Sábados 7:00 AM – 12:00 PM",
+    "laboratorio_clinico": "Lunes a sábado 6:00 AM – 6:00 PM",
+    "visitas_hospitalizacion": "Todos los días 10:00 AM – 6:00 PM (Sujeto a restricciones por área)",
+    "banco_de_sangre": "Lunes a viernes 7:00 AM – 5:00 PM, Sábados 7:00 AM – 1:00 PM"
+  },
+  "sedes_y_ubicaciones": [
+    {
+      "nombre": "Sede Principal (Valle del Lili)",
+      "direccion": "Carrera 98 # 18 - 49, Cali",
+      "ciudad": "Cali",
+      "servicios_principales": "Alta complejidad, Urgencias, Hospitalización, Trasplantes."
     },
-    "horarios": {
-      "urgencias": "24/7",
-      "consulta_externa": "Lunes a viernes 7:00–17:00, sábados 7:00–12:00",
-      "laboratorio": "Lunes a sábado 6:00–18:00"
+    {
+      "nombre": "Sede Avenida Estación",
+      "direccion": "Calle 23 Norte # 3N - 34, Cali",
+      "ciudad": "Cali",
+      "servicios_principales": "Consulta externa especializada, Laboratorio, Imágenes."
     },
-    "sedes": [
-      {
-        "nombre": "Sede Principal",
-        "direccion": "Cl. 98 #18-49, Cali",
-        "telefono": "+57 (2) 331 7000"
-      }
+    {
+      "nombre": "Sede Limonar",
+      "direccion": "Carrera 70 # 18 - 75, Cali",
+      "ciudad": "Cali",
+      "servicios_principales": "Consulta externa, Medicina física y rehabilitación."
+    },
+    {
+      "nombre": "Sede Alfaguara",
+      "direccion": "Calle 2Sur # 22 - 395, Jamundí",
+      "ciudad": "Jamundí",
+      "servicios_principales": "Consulta externa básica, toma de muestras."
+    }
+  ],
+  "convenios_eps_y_aseguradoras": {
+    "eps_regimen_contributivo": [
+      "Sura EPS (Convenio integral)",
+      "Sanitas EPS",
+      "Compensar",
+      "Coomeva EPS (Sujeto a red vigente)",
+      "Salud Total",
+      "Nueva EPS (Alta complejidad)"
     ],
-    "servicios_destacados": ["Cardiología", "Trasplantes", "Oncología", "Neurocirugía"]
+    "medicina_prepagada": [
+      "Colmédica",
+      "Medisanitas / Colsanitas",
+      "Coomeva Medicina Prepagada",
+      "Sura Medicina Prepagada",
+      "Allianz",
+      "Seguros Bolívar"
+    ],
+    "aseguradoras_y_otros": [
+      "SOAT (Atención inmediata por accidentes de tránsito)",
+      "ARL (Sura, Positiva, Bolivar, etc.)",
+      "Ecopetrol",
+      "Pólizas de Salud Internacionales"
+    ],
+    "nota_importante": "Para EPS no listadas, la atención se centra en Urgencias Vitales o servicios específicos de alta complejidad previa autorización."
+  },
+  "servicios_destacados": [
+    "Cardiología y Cirugía Cardiovascular",
+    "Trasplantes (Hígado, Riñón, Páncreas, Corazón, Médula Ósea)",
+    "Oncología Adultos y Pediátrica",
+    "Neurocirugía",
+    "Unidad de Cuidado Intensivo (UCI)"
+  ],
+  "servicios_de_apoyo": {
+    "banco_de_sangre": "Torre 3, Piso 1. Requisitos: Mayor de 18 años, más de 50kg, buen estado de salud.",
+    "capilla": "Piso 1, Sede Principal. Misas: Lunes-Viernes 6:00 PM, Domingos 10:00 AM.",
+    "alimentacion": "Restaurante principal, Juan Valdez y puntos de snacks en diversas torres.",
+    "parqueaderos": "Disponible en todas las sedes con tarifa de parqueadero público."
+  },
+  "servicios_digitales": {
+    "telemedicina": "Disponible vía App FVL Responde para citas seleccionadas.",
+    "soporte_tecnico_app": "+57 (2) 331 9090 ext. 7777"
   }
+}
