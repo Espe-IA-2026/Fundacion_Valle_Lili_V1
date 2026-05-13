@@ -1,6 +1,8 @@
 # Asistente Virtual FVL — Módulo 1 + Módulo 2
 
-Pipeline de extracción y estructuración de conocimiento para la Fundación Valle del Lili + dashboard Streamlit con cuatro funcionalidades LLM: tres basadas en context stuffing (NO-RAG) y un agente conversacional con recuperación semántica dinámica (RAG).
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+Pipeline de extracción y estructuración de conocimiento para la Fundación Valle del Lili + dashboard Streamlit con cuatro funcionalidades LLM: tres basadas en context stuffing (NO-RAG) y un agente conversacional con enrutamiento dual de herramientas (RAG + datos estructurados).
 
 ---
 
@@ -10,7 +12,7 @@ Este repositorio integra dos módulos complementarios:
 
 1. **`semantic_layer_fvl`**: capa semántica que extrae información pública institucional y genera una base de conocimiento en Markdown con frontmatter YAML extendido.
 2. **`app`** (Módulo 1 — NO-RAG): motor y frontend que consumen esa base de conocimiento usando context stuffing — todo el conocimiento consolidado en el prompt de sistema — y exponen tres funcionalidades LLM.
-3. **`app_agent`** (Módulo 2 — RAG): agente conversacional ReACT que recupera dinámicamente fragmentos relevantes desde un índice vectorial ChromaDB, mantiene memoria de sesión por checkpointer y responde únicamente con información institucional verificada.
+3. **`app_agent`** (Módulo 2 — RAG): agente conversacional ReACT con enrutamiento dual de herramientas — decide en cada turno si consultar ChromaDB (preguntas abiertas) o el JSON estructurado (datos concretos como EPS, horarios, contactos y convenios) — manteniendo memoria de sesión por checkpointer.
 
 Resultado final:
 
@@ -71,22 +73,27 @@ valledellili.org      YouTube (yt-dlp)      Feeds RSS curados
                                                     v
                                           KnowledgeRetriever
                                            (rag/retriever.py)
-                                                    |
-                                                    v
-                                      @tool retrieve_fvl_knowledge
-                                         (app_agent/tools.py)
-                                                    |
-                                                    v
-                                    create_agent (LangChain) +
-                                    InMemorySaver checkpointer
-                                       (app_agent/agent.py)
+                                                    |             data/structured/
+                                                    |              fvl_info.json
+                                                    |             (EPS, horarios,
+                                                    |              contactos, sedes)
+                                                    v                    v
+                                      @tool retrieve_fvl_knowledge   @tool get_fvl_structured_info
+                                      (búsqueda semántica ChromaDB)  (recuperación determinista JSON)
+                                                    \                  /
+                                                     \                /
+                                                      v              v
+                                    create_agent (LangChain) + Router / System Prompt
+                                    • ¿pregunta abierta?  → retrieve_fvl_knowledge
+                                    • ¿EPS/horarios/NIT?  → get_fvl_structured_info
+                                    InMemorySaver checkpointer (app_agent/agent.py)
                                                     |
                                           ciclo ReACT:
                                       razonar → tool call
                                       → razonar → responder
                                                     |
                                                     v
-                                    stream_agent_response()
+                                    stream_agent_events()  [thoughts + answer]
                                        thread_id UUID/sesión
                                        (app_agent/engine.py)
                                                     |
@@ -164,23 +171,51 @@ Lee todos los `.md` del knowledge base, extrae el frontmatter YAML como metadato
 
 Envuelve ChromaDB y expone `search(query, k, score_threshold)` que filtra los resultados por similitud mínima usando `similarity_search_with_relevance_scores`.
 
-**`src/app_agent/tools.py` — `retrieve_fvl_knowledge`**
+**`src/app_agent/tools.py` — dos herramientas `@tool`**
 
-Herramienta LangChain (`@tool`) que el agente invoca durante el ciclo ReACT. Usa un singleton `_retriever` con lazy initialization. Llama a `retriever.search(query, k=rag_top_k, score_threshold=rag_score_threshold)` y formatea la salida con headers `[Fragmento N — slug (category)]` separados por `---`. Si no hay resultados, devuelve un mensaje literal para que el agente lo comunique al usuario sin inventar datos.
+| Herramienta | Fuente de datos | Tipo de recuperación | Cuándo usarla |
+|---|---|---|---|
+| `retrieve_fvl_knowledge` | ChromaDB (embeddings sobre `.md`) | Semántica / vectorial | Preguntas abiertas: servicios, especialidades, procedimientos, historia institucional |
+| `get_fvl_structured_info` | `data/structured/fvl_info.json` | Determinista (lectura directa) | Datos concretos: EPS en convenio, medicina prepagada, horarios, contactos, sedes, NIT, acreditaciones, servicios digitales |
+
+`retrieve_fvl_knowledge` usa un singleton `_retriever` con lazy initialization, llama a `retriever.search(query, k, score_threshold)` y formatea la salida con headers `[Fragmento N — slug (category)]` separados por `---`.
+
+`get_fvl_structured_info` lee y formatea `fvl_info.json` con secciones: `informacion_corporativa`, `contactos_clave`, `horarios_atencion`, `sedes_y_ubicaciones`, `convenios_eps_y_aseguradoras`, `servicios_destacados`, `servicios_de_apoyo`, `servicios_digitales`.
+
+**`data/structured/fvl_info.json` — base de datos estructurada**
+
+Archivo JSON con información factual de acceso inmediato (sin embeddings). Estructura principal:
+
+```json
+{
+  "informacion_corporativa": { "nit", "nombre_legal", "acreditaciones", ... },
+  "contactos_clave":         { "central_telefonica", "urgencias_directo", "whatsapp_citas", ... },
+  "horarios_atencion":       { "urgencias", "consulta_externa", "laboratorio_clinico", ... },
+  "sedes_y_ubicaciones":     [ { "nombre", "direccion", "ciudad", "servicios_principales" }, ... ],
+  "convenios_eps_y_aseguradoras": {
+    "eps_regimen_contributivo": ["Sura EPS", "Sanitas EPS", "Compensar", ...],
+    "medicina_prepagada":       ["Colmédica", "Medisanitas", "Allianz", ...],
+    "aseguradoras_y_otros":     ["SOAT", "ARL", "Ecopetrol", ...]
+  },
+  "servicios_destacados":    [...],
+  "servicios_de_apoyo":      { "banco_de_sangre", "capilla", "alimentacion", "parqueaderos" },
+  "servicios_digitales":     { "telemedicina", "soporte_tecnico_app" }
+}
+```
 
 **`src/app_agent/agent.py` — `build_rag_agent()`**
 
 Construye el agente usando `create_agent` de `langchain.agents` con:
 - Modelo `ChatOpenAI(temperature=0.1)` para respuestas deterministas.
-- `tools=[retrieve_fvl_knowledge]`.
-- `system_prompt` estricto que instruye al agente a siempre recuperar antes de responder, nunca inventar datos y citar fuentes con formato `DOC:<slug>`.
+- `tools=[get_fvl_structured_info, retrieve_fvl_knowledge]`.
+- `system_prompt` con reglas de enrutamiento explícitas: preguntas sobre EPS/convenios/horarios/contactos → `get_fvl_structured_info`; preguntas abiertas sobre servicios/especialidades/historia → `retrieve_fvl_knowledge`.
 - `checkpointer=InMemorySaver()` de LangGraph para memoria de sesión diferenciada por `thread_id`.
 
 **`src/app_agent/engine.py` — `get_rag_agent()` y `stream_agent_response()`**
 
 `get_rag_agent(force_rebuild=False)` es un singleton con lazy initialization. `force_rebuild=True` es útil tras re-indexar con `build-index --force`.
 
-`stream_agent_response(question, thread_id)` envía únicamente el mensaje actual al agente; el checkpointer recupera el historial del hilo automáticamente. Filtra el stream para emitir solo el `AIMessage` final, descartando `ToolMessage` intermedios y `AIMessage` con `tool_calls` pendientes.
+`stream_agent_events(question, thread_id)` es el método principal: emite eventos tipados (`thought` cuando el agente decide usar una herramienta, `answer` con la respuesta final, `error` en caso de fallo). La UI Streamlit muestra en tiempo real qué herramienta eligió el agente en cada turno. `stream_agent_response` mantiene compatibilidad para streaming de texto simple.
 
 ### Memoria de sesión
 
@@ -204,8 +239,9 @@ Salida esperada: `index_ready=True`, `chunks=N`, `chroma_dir=<ruta>`.
 
 ```text
 .
+├── LICENSE                      ← MIT License (2026, Espe-IA-2026 / UAO)
 ├── Makefile
-├── pyproject.toml               ← requires-python = ">=3.11,<3.14"
+├── pyproject.toml               ← requires-python = ">=3.11,<3.14", license = MIT
 ├── .python-version              ← 3.12 (pinned con uv)
 ├── .env.example
 ├── data/
@@ -217,6 +253,8 @@ Salida esperada: `index_ready=True`, `chunks=N`, `chroma_dir=<ruta>`.
 │   │   ├── 09_noticias/
 │   │   └── 10_multimedia/
 │   ├── chroma_db/               ← índice vectorial ChromaDB (gitignored)
+│   ├── structured/
+│   │   └── fvl_info.json        ← datos estructurados: EPS, horarios, contactos, sedes
 │   ├── debug_context.txt
 │   └── debug_context_raw.txt
 ├── reports/
@@ -247,20 +285,21 @@ Salida esperada: `index_ready=True`, `chunks=N`, `chroma_dir=<ruta>`.
 │   │   ├── indexer.py           ← KnowledgeIndexer + _sanitize_metadata()
 │   │   └── retriever.py         ← KnowledgeRetriever
 │   ├── app_agent/               ← agente RAG (Módulo 2)
-│   │   ├── tools.py             ← @tool retrieve_fvl_knowledge
-│   │   ├── agent.py             ← build_rag_agent() con checkpointer
-│   │   ├── engine.py            ← singleton + stream_agent_response()
+│   │   ├── tools.py             ← @tool retrieve_fvl_knowledge + @tool get_fvl_structured_info
+│   │   ├── agent.py             ← build_rag_agent() con enrutamiento dual + checkpointer
+│   │   ├── engine.py            ← singleton + stream_agent_events()
 │   │   └── __init__.py
 │   └── app/                     ← dashboard Streamlit (Módulo 1 + 2)
 │       ├── engine.py            ← cadenas LCEL + stream_response()
 │       └── main.py              ← 4 pestañas (Q&A, Resumen, FAQ, Agente RAG)
-└── tests/                       ← ~105 tests (todos offline)
+└── tests/                       ← 162 tests (todos offline)
     ├── test_rag_indexer.py      ← 9 tests KnowledgeIndexer
     ├── test_rag_retriever.py    ← 6 tests KnowledgeRetriever
     ├── test_rag_tools.py        ← 6 tests retrieve_fvl_knowledge
+    ├── test_structured_tool.py  ← 11 tests get_fvl_structured_info (incl. EPS)
     ├── test_rag_agent.py        ← 4 tests build_rag_agent
-    ├── test_rag_engine.py       ← 7 tests get_rag_agent + stream_agent_response
-    └── ...                      ← 88 tests existentes de Módulo 1
+    ├── test_rag_engine.py       ← 7 tests get_rag_agent + stream_agent_events
+    └── ...                      ← 119 tests de Módulo 1 + otros componentes
 ```
 
 ---
@@ -273,16 +312,18 @@ Salida esperada: `index_ready=True`, `chunks=N`, `chroma_dir=<ruta>`.
 | Gestor de paquetes | `uv` |
 | LLM | `langchain 0.3` + `langchain-openai` + OpenAI `gpt-4o-mini` |
 | Embeddings | `text-embedding-3-small` via `langchain-openai` |
-| Agente | `create_agent` de `langchain.agents` |
-| Grafo / Memoria | `langgraph 1.0` — `InMemorySaver` checkpointer |
-| Vectorstore | `chromadb` + `langchain-chroma` |
+| Agente | `create_agent` de `langchain.agents` + enrutamiento dual de herramientas |
+|| Datos estructurados | `data/structured/fvl_info.json` — recuperación determinista sin embeddings |
+|| Grafo / Memoria | `langgraph 1.0` — `InMemorySaver` checkpointer |
+|| Vectorstore | `chromadb` + `langchain-chroma` |
 | Modelos de datos | `pydantic v2` + `pydantic-settings` |
 | HTTP | `httpx` con retry exponencial |
 | Scraping | `beautifulsoup4`, `markdownify` |
 | YouTube | `yt-dlp` (sin descarga de video) |
 | Dashboard | `streamlit` |
 | Linting | `ruff` (line-length: 110) |
-| Testing | `pytest` (~105 tests, todos offline) |
+|| Testing | `pytest` (162 tests, todos offline) |
+|| Licencia | MIT License |
 
 ---
 
@@ -447,7 +488,7 @@ uv run streamlit run src/app/main.py
 
 ## 13. Testing
 
-Suite completa (~105 tests, todos offline):
+Suite completa (162 tests, todos offline):
 
 ```powershell
 uv run pytest
@@ -458,9 +499,10 @@ uv run pytest -q    # salida compacta
 |---|---|
 | `test_rag_indexer.py` | `KnowledgeIndexer`: frontmatter, sanitización de metadatos, carga de documentos, `build_or_load`, `_drop_collection` |
 | `test_rag_retriever.py` | `KnowledgeRetriever`: filtro por threshold, parámetro k, casos vacíos, boundary exacto |
-| `test_rag_tools.py` | `retrieve_fvl_knowledge`: metadata tool, sin resultados, formato headers con/sin categoría, separador, parámetros de settings |
-| `test_rag_agent.py` | `build_rag_agent`: retorno del agente, tool correcta, `InMemorySaver` presente, temperatura 0.1 |
-| `test_rag_engine.py` | `get_rag_agent` singleton + `force_rebuild`; `stream_agent_response`: filtro de mensajes, `thread_id` en config, manejo de excepciones |
+| `test_rag_tools.py` | `retrieve_fvl_knowledge`: metadata tool, sin resultados, formato headers (limpieza de prefijo numérico), separador, parámetros de settings |
+| `test_structured_tool.py` | `get_fvl_structured_info`: NIT, teléfono, horarios, sedes, acreditaciones, **EPS en convenio**, medicina prepagada, servicios digitales, errores de archivo |
+| `test_rag_agent.py` | `build_rag_agent`: retorno del agente, herramientas registradas, `InMemorySaver` presente, temperatura 0.1 |
+| `test_rag_engine.py` | `get_rag_agent` singleton + `force_rebuild`; `stream_agent_events`: thoughts, answer, error; `thread_id` en config |
 | `test_settings.py` | Config y variables de entorno |
 | `test_schemas.py` | Modelos Pydantic |
 | `test_web_crawler.py` | WebCrawler, selectors CSS, conversión HTML→MD |
@@ -491,6 +533,9 @@ La librería OpenAI lee `os.environ`, no el objeto `Settings`. La API key debe e
 **El agente responde sin recuperar documentos**
 Aumentar `RAG_SCORE_THRESHOLD` (default 0.3) o bajar `RAG_TOP_K` para ser más selectivo. Revisar que el índice tenga chunks con `uv run semantic-layer-fvl build-index`.
 
+**El agente dice que no tiene información sobre EPS o convenios**
+Este problema estaba causado por un mismatch entre las claves del JSON y la función `_format_structured_data`. Verificar que `data/structured/fvl_info.json` tenga la clave `convenios_eps_y_aseguradoras` con la estructura anidada correcta (`eps_regimen_contributivo`, `medicina_prepagada`, `aseguradoras_y_otros`).
+
 **El Módulo 1 (Q&A/Resumen/FAQ) responde lento o es costoso**
 Bajar `RESPONSE_MAX_TOKENS`, `SUMMARY_MAX_TOKENS` o `FAQ_MAX_TOKENS`. Ajustar `HISTORY_MAX_*` para reducir tokens del historial.
 
@@ -515,3 +560,4 @@ El proyecto usa Python 3.12 obligatoriamente. Python 3.14 es incompatible con `l
 | Iteración 1 | ✅ Completa | Pipeline web (4 dominios) + dashboard NO-RAG (Q&A, Resumen, FAQ) + context stuffing con compactación de contexto |
 | Iteración 2 | ✅ Completa | YouTubeRichExtractor, noticias curadas, deduplicación, retry HTTP, presets de ruido, streaming LCEL, CSS profesional |
 | Módulo 2 — RAG | ✅ Completa | `KnowledgeIndexer`, `KnowledgeRetriever`, `@tool retrieve_fvl_knowledge`, agente ReACT con `InMemorySaver`, pestaña Agente RAG en Streamlit, suite de tests offline, comando CLI `build-index` |
+| Módulo 2 — Agente dual | ✅ Completa | `@tool get_fvl_structured_info` con enrutamiento por tipo de consulta, `fvl_info.json` con EPS/convenios/horarios/sedes, system prompt con reglas de enrutamiento explícitas, `stream_agent_events` con thoughts, 162 tests, MIT License |
