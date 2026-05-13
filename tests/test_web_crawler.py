@@ -224,7 +224,7 @@ def test_web_crawler_cleans_sede_domain_markdown(monkeypatch) -> None:
         def raise_for_status(self) -> None:
             return None
 
-    def handler(url: str, headers: dict[str, str], timeout: int) -> ResponseStub:
+    def handler(url: str, headers: dict[str, str], timeout: int, **kwargs) -> ResponseStub:
         return ResponseStub(url)
 
     def robots_fetcher(robots_url: str) -> RobotsFetchResult:

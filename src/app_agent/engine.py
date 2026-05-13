@@ -1,9 +1,10 @@
-"""Motor de alto nivel para el agente RAG: singleton y streaming."""
+"""Motor de alto nivel para el agente FVL: singleton, streaming y eventos de herramienta."""
 
 from __future__ import annotations
 
 import logging
 from collections.abc import Iterator
+from typing import TypedDict
 
 from app_agent.agent import build_rag_agent
 
@@ -90,4 +91,79 @@ def stream_agent_response(
         yield (
             "Lo siento, ocurrió un error al procesar tu consulta. "
             "Por favor intenta de nuevo."
+        )
+
+
+class AgentEvent(TypedDict):
+    """Evento emitido por el agente durante el ciclo ReACT."""
+
+    type: str   # "thought" | "answer" | "error"
+    tool: str   # nombre de la herramienta invocada (solo cuando type == "thought")
+    text: str   # contenido del mensaje (solo cuando type == "answer" o "error")
+
+
+def stream_agent_events(
+    question: str,
+    thread_id: str,
+) -> Iterator[AgentEvent]:
+    """Genera eventos del agente: pensamientos (herramienta elegida) y respuesta final.
+
+    A diferencia de ``stream_agent_response``, este generador emite dicts tipados
+    que permiten a la UI distinguir qué herramienta eligió el agente y mostrar
+    el razonamiento antes de la respuesta final.
+
+    Tipos de evento emitidos:
+
+    - ``{"type": "thought", "tool": "<nombre>", "text": ""}`` — el agente decidió
+      invocar una herramienta; se emite uno por cada tool call en el turno.
+    - ``{"type": "answer", "text": "<respuesta>", "tool": ""}`` — respuesta final
+      del agente lista para mostrar al usuario.
+    - ``{"type": "error", "text": "<msg>", "tool": ""}`` — error irrecuperable
+      durante el stream; la UI debe mostrarlo como respuesta de fallback.
+
+    Args:
+        question: Pregunta actual del usuario.
+        thread_id: Identificador UUID de la sesión de conversación.
+
+    Yields:
+        ``AgentEvent`` con los campos ``type``, ``tool`` y ``text``.
+    """
+    agent = get_rag_agent()
+    messages = [{"role": "user", "content": question}]
+    config = {"configurable": {"thread_id": thread_id}}
+
+    try:
+        for step in agent.stream(
+            {"messages": messages},
+            config,
+            stream_mode="values",
+        ):
+            last_msg = step["messages"][-1]
+            content = getattr(last_msg, "content", None)
+            tool_calls = getattr(last_msg, "tool_calls", None)
+
+            # El agente decide invocar herramienta(s) — emitir un "thought" por cada una
+            if tool_calls and last_msg.__class__.__name__ == "AIMessage":
+                for tc in tool_calls:
+                    tool_name = tc.get("name", "herramienta") if isinstance(tc, dict) else getattr(tc, "name", "herramienta")
+                    yield AgentEvent(type="thought", tool=tool_name, text="")
+
+            # Respuesta final del agente (sin tool_calls pendientes)
+            elif (
+                content
+                and isinstance(content, str)
+                and not tool_calls
+                and last_msg.__class__.__name__ == "AIMessage"
+            ):
+                yield AgentEvent(type="answer", tool="", text=content)
+
+    except Exception as exc:
+        logger.exception("Error durante stream_agent_events: %s", exc)
+        yield AgentEvent(
+            type="error",
+            tool="",
+            text=(
+                "Lo siento, ocurrió un error al procesar tu consulta. "
+                "Por favor intenta de nuevo."
+            ),
         )

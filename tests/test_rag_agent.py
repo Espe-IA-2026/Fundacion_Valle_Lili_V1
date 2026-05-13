@@ -90,3 +90,39 @@ def test_build_rag_agent_crea_modelo_con_temperatura_baja(mock_settings: MagicMo
     call_kwargs = mock_chat_openai.call_args.kwargs
     assert call_kwargs["temperature"] == 0.1
     assert call_kwargs["model"] == "gpt-4o-mini"
+
+
+def test_build_rag_agent_registra_herramienta_datos_estructurados(mock_settings: MagicMock) -> None:
+    """build_rag_agent registra get_fvl_structured_info como segunda herramienta.
+
+    La herramienta de datos estructurados permite al agente responder preguntas
+    directas (teléfonos, horarios, NIT) sin consultar el índice vectorial ChromaDB.
+    Este camino determinista es el núcleo del enrutamiento de Módulo 2.
+    """
+    with patch("app_agent.agent.get_settings", return_value=mock_settings), \
+         patch("app_agent.agent.ChatOpenAI", return_value=MagicMock()), \
+         patch("app_agent.agent.create_agent") as mock_create_agent:
+        mock_create_agent.return_value = MagicMock()
+        from app_agent.agent import build_rag_agent
+        build_rag_agent()
+
+    tool_names = [t.name for t in mock_create_agent.call_args.kwargs["tools"]]
+    assert "get_fvl_structured_info" in tool_names
+
+
+def test_build_rag_agent_registra_exactamente_dos_herramientas(mock_settings: MagicMock) -> None:
+    """build_rag_agent pasa exactamente dos herramientas a create_agent.
+
+    El enrutador requiere dos caminos diferenciados: RAG (semántico) y datos
+    estructurados (determinista). Más o menos herramientas indica un error de
+    configuración del agente.
+    """
+    with patch("app_agent.agent.get_settings", return_value=mock_settings), \
+         patch("app_agent.agent.ChatOpenAI", return_value=MagicMock()), \
+         patch("app_agent.agent.create_agent") as mock_create_agent:
+        mock_create_agent.return_value = MagicMock()
+        from app_agent.agent import build_rag_agent
+        build_rag_agent()
+
+    tools_passed = mock_create_agent.call_args.kwargs["tools"]
+    assert len(tools_passed) == 2
