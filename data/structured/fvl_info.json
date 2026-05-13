@@ -1,120 +1,98 @@
 {
-  "razon_social": "Fundación Valle del Lili",
-  "nit": "890.303.394-7",
-  "año_fundacion": 1992,
-  "tipo_entidad": "Institución Prestadora de Servicios de Salud (IPS) sin ánimo de lucro",
-  "director_medico": "Dr. Carlos Enrique Arango Aguirre",
-  "director_ejecutivo": "Dr. Juan Guillermo Ortiz Arboleda",
-  "sitio_web": "https://www.valledellili.org",
-  "contactos": {
-    "central": "+57 (2) 331 7000",
-    "urgencias": "+57 (2) 331 7001",
-    "citas": "+57 (2) 331 7007",
-    "email_general": "info@valledellili.org",
-    "email_donaciones": "donaciones@valledellili.org"
+  "informacion_corporativa": {
+    "nombre_legal": "Fundación Valle del Lili",
+    "nit": "890.327.251-8",
+    "naturaleza_juridica": "Entidad privada sin ánimo de lucro",
+    "pagina_web": "https://valledellili.org",
+    "ranking_reputacion": "Mejor clínica de Colombia y top 4 en Latinoamérica según América Economía.",
+    "acreditaciones": [
+      "Acreditación en Salud con Excelencia (MinSalud)",
+      "Joint Commission International (JCI)",
+      "Certificación como Hospital Universitario"
+    ]
   },
-  "horarios": {
-    "urgencias": "24 horas al día, 7 días a la semana",
-    "consulta_externa": "Lunes a viernes 7:00–17:00, sábados 7:00–12:00",
-    "laboratorio": "Lunes a sábado 6:00–18:00",
-    "imagen_diagnostica": "Lunes a sábado 7:00–17:00",
-    "farmacia": "Lunes a domingo 7:00–19:00",
-    "caja_pagos": "Lunes a viernes 7:00–16:00"
+  "contactos_clave": {
+    "central_telefonica": "+57 (2) 331 7000",
+    "urgencias_directo": "+57 (2) 331 7001",
+    "citas_medicas": "+57 (2) 331 9090",
+    "whatsapp_citas": "+57 318 331 9090",
+    "email_informacion": "info@valledellili.org",
+    "email_pqrs_quejas": "servicioalcliente@fvl.org.co",
+    "extension_objetos_perdidos": "3100"
   },
-  "sedes": [
+  "horarios_atencion": {
+    "urgencias": "Atención 24 horas, 7 días a la semana",
+    "consulta_externa": "Lunes a viernes 7:00 AM – 5:00 PM, Sábados 7:00 AM – 12:00 PM",
+    "laboratorio_clinico": "Lunes a sábado 6:00 AM – 6:00 PM",
+    "visitas_hospitalizacion": "Todos los días 10:00 AM – 6:00 PM (Sujeto a restricciones por área)",
+    "banco_de_sangre": "Lunes a viernes 7:00 AM – 5:00 PM, Sábados 7:00 AM – 1:00 PM"
+  },
+  "sedes_y_ubicaciones": [
     {
-      "nombre": "Sede Principal",
-      "direccion": "Cl. 98 #18-49, Cali, Valle del Cauca",
-      "telefono": "+57 (2) 331 7000",
-      "referencia": "Barrio Ciudad Jardín, frente al CC Unicentro Cali"
+      "nombre": "Sede Principal (Valle del Lili)",
+      "direccion": "Carrera 98 # 18 - 49, Cali",
+      "ciudad": "Cali",
+      "servicios_principales": "Alta complejidad, Urgencias, Hospitalización, Trasplantes."
     },
     {
-      "nombre": "Sede Occidente",
-      "direccion": "Carrera 87 #25A-30, Cali, Valle del Cauca",
-      "telefono": "+57 (2) 331 7050",
-      "referencia": "Barrio El Limonar, zona occidental de Cali"
+      "nombre": "Sede Avenida Estación",
+      "direccion": "Calle 23 Norte # 3N - 34, Cali",
+      "ciudad": "Cali",
+      "servicios_principales": "Consulta externa especializada, Laboratorio, Imágenes."
     },
     {
-      "nombre": "Sede Norte",
-      "direccion": "Av. 6N #45-30, Cali, Valle del Cauca",
-      "telefono": "+57 (2) 331 7080",
-      "referencia": "Norte de Cali, cerca al barrio Santa Mónica"
+      "nombre": "Sede Limonar",
+      "direccion": "Carrera 70 # 18 - 75, Cali",
+      "ciudad": "Cali",
+      "servicios_principales": "Consulta externa, Medicina física y rehabilitación."
+    },
+    {
+      "nombre": "Sede Alfaguara",
+      "direccion": "Calle 2Sur # 22 - 395, Jamundí",
+      "ciudad": "Jamundí",
+      "servicios_principales": "Consulta externa básica, toma de muestras."
     }
   ],
-  "servicios_destacados": [
-    "Cardiología y Cardiocirugía",
-    "Trasplantes (riñón, hígado, corazón)",
-    "Oncología y Radioterapia",
-    "Neurocirugía",
-    "Unidad de Quemados",
-    "Medicina Interna",
-    "Pediatría y Neonatología",
-    "Ortopedia y Traumatología",
-    "Ginecología y Obstetricia",
-    "Urgencias 24 horas"
-  ],
-  "acreditaciones": [
-    "Joint Commission International (JCI)",
-    "Icontec — Acreditación en Salud Colombia",
-    "Centro de Excelencia en Trasplantes"
-  ],
-  "redes_sociales": {
-    "facebook": "https://www.facebook.com/FundacionValledelLili",
-    "instagram": "@fundacionvalledellili",
-    "youtube": "https://www.youtube.com/@FundacionValledelLili",
-    "linkedin": "Fundación Valle del Lili"
-  },
-  "como_llegar": {
-    "transporte_publico": "Rutas MIO que pasan por Calle 98: T31, A31, 231",
-    "parqueadero": "Disponible en sede principal (tarifa por hora)"
-  },
-  "metodos_pago": {
-    "modalidades": [
-      "EPS en convenio",
-      "Medicina prepagada",
-      "Particular (pago directo)",
-      "Seguros internacionales",
-      "Seguro SOAT"
+  "convenios_eps_y_aseguradoras": {
+    "eps_regimen_contributivo": [
+      "Sura EPS (Convenio integral)",
+      "Sanitas EPS",
+      "Compensar",
+      "Coomeva EPS (Sujeto a red vigente)",
+      "Salud Total",
+      "Nueva EPS (Alta complejidad)"
     ],
-    "horario_caja": "Lunes a viernes 7:00–16:00"
+    "medicina_prepagada": [
+      "Colmédica",
+      "Medisanitas / Colsanitas",
+      "Coomeva Medicina Prepagada",
+      "Sura Medicina Prepagada",
+      "Allianz",
+      "Seguros Bolívar"
+    ],
+    "aseguradoras_y_otros": [
+      "SOAT (Atención inmediata por accidentes de tránsito)",
+      "ARL (Sura, Positiva, Bolivar, etc.)",
+      "Ecopetrol",
+      "Pólizas de Salud Internacionales"
+    ],
+    "nota_importante": "Para EPS no listadas, la atención se centra en Urgencias Vitales o servicios específicos de alta complejidad previa autorización."
   },
-  "donaciones": {
-    "descripcion": "La FVL es una entidad sin ánimo de lucro. Las donaciones apoyan programas de investigación clínica, becas para médicos y atención a pacientes de escasos recursos.",
-    "contacto": "donaciones@valledellili.org",
-    "sitio_web": "https://www.valledellili.org/donaciones"
+  "servicios_destacados": [
+    "Cardiología y Cirugía Cardiovascular",
+    "Trasplantes (Hígado, Riñón, Páncreas, Corazón, Médula Ósea)",
+    "Oncología Adultos y Pediátrica",
+    "Neurocirugía",
+    "Unidad de Cuidado Intensivo (UCI)"
+  ],
+  "servicios_de_apoyo": {
+    "banco_de_sangre": "Torre 3, Piso 1. Requisitos: Mayor de 18 años, más de 50kg, buen estado de salud.",
+    "capilla": "Piso 1, Sede Principal. Misas: Lunes-Viernes 6:00 PM, Domingos 10:00 AM.",
+    "alimentacion": "Restaurante principal, Juan Valdez y puntos de snacks en diversas torres.",
+    "parqueaderos": "Disponible en todas las sedes con tarifa de parqueadero público."
   },
-  "preguntas_frecuentes": [
-    {
-      "pregunta": "¿Cómo solicito una cita médica?",
-      "respuesta": "Puede solicitar cita llamando al +57 (2) 331 7007, a través del sitio web valledellili.org o presencialmente en cualquier sede."
-    },
-    {
-      "pregunta": "¿Cuál es el NIT de la Fundación?",
-      "respuesta": "El NIT de la Fundación Valle del Lili es 890.303.394-7."
-    },
-    {
-      "pregunta": "¿Cuáles son los horarios de urgencias?",
-      "respuesta": "El servicio de urgencias está disponible las 24 horas del día, los 7 días de la semana."
-    },
-    {
-      "pregunta": "¿Dónde están ubicadas las sedes?",
-      "respuesta": "La sede principal está en Cl. 98 #18-49 (Ciudad Jardín). También hay sedes en Occidente (Cra. 87 #25A-30) y Norte (Av. 6N #45-30)."
-    },
-    {
-      "pregunta": "¿Qué EPS tienen convenio con la FVL?",
-      "respuesta": "La FVL atiende pacientes de múltiples EPS. Para verificar su EPS específica, comuníquese al +57 (2) 331 7000."
-    },
-    {
-      "pregunta": "¿La Fundación realiza trasplantes?",
-      "respuesta": "Sí, la FVL es un Centro de Excelencia en Trasplantes con programas de trasplante de riñón, hígado y corazón."
-    },
-    {
-      "pregunta": "¿Cómo puedo hacer una donación?",
-      "respuesta": "Las donaciones se pueden gestionar enviando un correo a donaciones@valledellili.org o visitando valledellili.org/donaciones."
-    },
-    {
-      "pregunta": "¿Cuándo fue fundada la institución?",
-      "respuesta": "La Fundación Valle del Lili fue fundada en 1992 en Cali, Colombia."
-    }
-  ]
+  "servicios_digitales": {
+    "telemedicina": "Disponible vía App FVL Responde para citas seleccionadas.",
+    "soporte_tecnico_app": "+57 (2) 331 9090 ext. 7777"
+  }
 }

@@ -77,7 +77,8 @@ def test_retrieve_formatea_fragmento_con_slug_y_categoria() -> None:
         from app_agent.tools import retrieve_fvl_knowledge
         result = retrieve_fvl_knowledge.invoke({"query": "cardiología"})
 
-    assert "[Fragmento 1 — cardiologia (01_servicios)]" in result
+    # El código elimina el prefijo numérico '01_' → devuelve solo 'servicios'
+    assert "[Fragmento 1 — cardiologia (servicios)]" in result
     assert "Contenido de cardiología." in result
 
 

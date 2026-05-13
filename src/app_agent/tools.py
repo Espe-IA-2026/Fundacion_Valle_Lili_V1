@@ -93,41 +93,103 @@ def retrieve_fvl_knowledge(query: str) -> str:
 
 
 def _format_structured_data(data: dict) -> str:
-    """Convierte el diccionario de datos estructurados a texto legible para el agente."""
+    """Convierte el diccionario de datos estructurados a texto legible para el agente.
+
+    Lee la estructura real del archivo fvl_info.json con sus secciones anidadas:
+    informacion_corporativa, contactos_clave, horarios_atencion, sedes_y_ubicaciones,
+    convenios_eps_y_aseguradoras, servicios_destacados, servicios_de_apoyo,
+    servicios_digitales.
+    """
     lines: list[str] = []
 
-    lines.append(f"Razón social: {data.get('razon_social', 'N/A')}")
-    lines.append(f"NIT: {data.get('nit', 'N/A')}")
-    lines.append(f"Año de fundación: {data.get('año_fundacion', 'N/A')}")
-    lines.append(f"Tipo de entidad: {data.get('tipo_entidad', 'N/A')}")
-    lines.append(f"Director médico: {data.get('director_medico', 'N/A')}")
-    lines.append(f"Director ejecutivo: {data.get('director_ejecutivo', 'N/A')}")
-    lines.append(f"Sitio web: {data.get('sitio_web', 'N/A')}")
-    lines.append("")
+    # ── Información corporativa ────────────────────────────────────────────────
+    corp = data.get("informacion_corporativa", {})
+    if corp:
+        lines.append(f"Razón social: {corp.get('nombre_legal', 'N/A')}")
+        lines.append(f"NIT: {corp.get('nit', 'N/A')}")
+        lines.append(f"Naturaleza jurídica: {corp.get('naturaleza_juridica', 'N/A')}")
+        lines.append(f"Sitio web: {corp.get('pagina_web', 'N/A')}")
+        if corp.get("ranking_reputacion"):
+            lines.append(f"Reconocimiento: {corp['ranking_reputacion']}")
+        lines.append("")
 
-    contactos = data.get("contactos", {})
+        acreds = corp.get("acreditaciones", [])
+        if acreds:
+            lines.append("ACREDITACIONES:")
+            for a in acreds:
+                lines.append(f"  - {a}")
+            lines.append("")
+
+    # ── Contactos ─────────────────────────────────────────────────────────────
+    contactos = data.get("contactos_clave", {})
     if contactos:
         lines.append("CONTACTOS:")
+        _CONTACT_LABELS = {
+            "central_telefonica": "Central telefónica",
+            "urgencias_directo": "Urgencias (directo)",
+            "citas_medicas": "Citas médicas",
+            "whatsapp_citas": "WhatsApp citas",
+            "email_informacion": "Correo información",
+            "email_pqrs_quejas": "Correo PQRS / quejas",
+            "extension_objetos_perdidos": "Ext. objetos perdidos",
+        }
         for k, v in contactos.items():
-            lines.append(f"  {k}: {v}")
+            label = _CONTACT_LABELS.get(k, k.replace("_", " ").capitalize())
+            lines.append(f"  {label}: {v}")
         lines.append("")
 
-    horarios = data.get("horarios", {})
+    # ── Horarios ──────────────────────────────────────────────────────────────
+    horarios = data.get("horarios_atencion", {})
     if horarios:
         lines.append("HORARIOS DE ATENCIÓN:")
+        _HORARIO_LABELS = {
+            "urgencias": "Urgencias",
+            "consulta_externa": "Consulta externa",
+            "laboratorio_clinico": "Laboratorio clínico",
+            "visitas_hospitalizacion": "Visitas hospitalización",
+            "banco_de_sangre": "Banco de sangre",
+        }
         for k, v in horarios.items():
-            lines.append(f"  {k}: {v}")
+            label = _HORARIO_LABELS.get(k, k.replace("_", " ").capitalize())
+            lines.append(f"  {label}: {v}")
         lines.append("")
 
-    sedes = data.get("sedes", [])
+    # ── Sedes ─────────────────────────────────────────────────────────────────
+    sedes = data.get("sedes_y_ubicaciones", [])
     if sedes:
         lines.append("SEDES:")
         for sede in sedes:
-            lines.append(f"  {sede['nombre']}: {sede['direccion']} — Tel: {sede['telefono']}")
-            if sede.get("referencia"):
-                lines.append(f"    ({sede['referencia']})")
+            ciudad = sede.get("ciudad", "")
+            ciudad_str = f" ({ciudad})" if ciudad else ""
+            lines.append(f"  {sede['nombre']}{ciudad_str}: {sede['direccion']}")
+            if sede.get("servicios_principales"):
+                lines.append(f"    Servicios: {sede['servicios_principales']}")
         lines.append("")
 
+    # ── Convenios, EPS y aseguradoras ─────────────────────────────────────────
+    convenios = data.get("convenios_eps_y_aseguradoras", {})
+    if convenios:
+        lines.append("CONVENIOS, EPS Y ASEGURADORAS:")
+        eps_contrib = convenios.get("eps_regimen_contributivo", [])
+        if eps_contrib:
+            lines.append("  EPS Régimen Contributivo:")
+            for eps in eps_contrib:
+                lines.append(f"    - {eps}")
+        prepagada = convenios.get("medicina_prepagada", [])
+        if prepagada:
+            lines.append("  Medicina Prepagada:")
+            for mp in prepagada:
+                lines.append(f"    - {mp}")
+        otros = convenios.get("aseguradoras_y_otros", [])
+        if otros:
+            lines.append("  Aseguradoras y otros:")
+            for o in otros:
+                lines.append(f"    - {o}")
+        if convenios.get("nota_importante"):
+            lines.append(f"  Nota: {convenios['nota_importante']}")
+        lines.append("")
+
+    # ── Servicios destacados ──────────────────────────────────────────────────
     servicios = data.get("servicios_destacados", [])
     if servicios:
         lines.append("SERVICIOS DESTACADOS:")
@@ -135,42 +197,22 @@ def _format_structured_data(data: dict) -> str:
             lines.append(f"  - {s}")
         lines.append("")
 
-    acreds = data.get("acreditaciones", [])
-    if acreds:
-        lines.append("ACREDITACIONES:")
-        for a in acreds:
-            lines.append(f"  - {a}")
+    # ── Servicios de apoyo ────────────────────────────────────────────────────
+    apoyo = data.get("servicios_de_apoyo", {})
+    if apoyo:
+        lines.append("SERVICIOS DE APOYO:")
+        for k, v in apoyo.items():
+            label = k.replace("_", " ").capitalize()
+            lines.append(f"  {label}: {v}")
         lines.append("")
 
-    redes = data.get("redes_sociales", {})
-    if redes:
-        lines.append("REDES SOCIALES:")
-        for k, v in redes.items():
-            lines.append(f"  {k}: {v}")
-        lines.append("")
-
-    pago = data.get("metodos_pago", {})
-    if pago:
-        lines.append("MÉTODOS DE PAGO:")
-        for m in pago.get("modalidades", []):
-            lines.append(f"  - {m}")
-        if pago.get("horario_caja"):
-            lines.append(f"  Horario de caja: {pago['horario_caja']}")
-        lines.append("")
-
-    donaciones = data.get("donaciones", {})
-    if donaciones:
-        lines.append("DONACIONES:")
-        lines.append(f"  {donaciones.get('descripcion', '')}")
-        lines.append(f"  Contacto: {donaciones.get('contacto', '')}")
-        lines.append("")
-
-    faqs = data.get("preguntas_frecuentes", [])
-    if faqs:
-        lines.append("PREGUNTAS FRECUENTES:")
-        for faq in faqs:
-            lines.append(f"  P: {faq['pregunta']}")
-            lines.append(f"  R: {faq['respuesta']}")
+    # ── Servicios digitales ───────────────────────────────────────────────────
+    digitales = data.get("servicios_digitales", {})
+    if digitales:
+        lines.append("SERVICIOS DIGITALES:")
+        for k, v in digitales.items():
+            label = k.replace("_", " ").capitalize()
+            lines.append(f"  {label}: {v}")
         lines.append("")
 
     return "\n".join(lines)
@@ -181,16 +223,17 @@ def get_fvl_structured_info(query: str) -> str:
     """Obtiene datos concretos y estructurados de la Fundación Valle del Lili (FVL).
 
     Usa esta herramienta para preguntas directas y factuales como:
-    - Números de teléfono y correos de contacto (central, urgencias, citas)
-    - Horarios de atención (consulta externa, urgencias, laboratorio, farmacia)
-    - Direcciones y ubicaciones de sedes
+    - Números de teléfono y correos de contacto (central, urgencias, citas, WhatsApp)
+    - Horarios de atención (consulta externa, urgencias, laboratorio, banco de sangre)
+    - Direcciones y ubicaciones de sedes (sede principal, Limonar, Avenida Estación, Alfaguara)
     - NIT o identificación fiscal de la institución
-    - Nombre de directivos (director médico, director ejecutivo)
-    - Redes sociales oficiales
-    - Acreditaciones y certificaciones internacionales
-    - Métodos de pago aceptados
-    - Información sobre donaciones
-    - Preguntas frecuentes con respuesta directa
+    - Acreditaciones y certificaciones internacionales (JCI, MinSalud)
+    - Convenios con EPS del régimen contributivo (Sura, Sanitas, Compensar, Nueva EPS, etc.)
+    - Medicina prepagada (Colmédica, Medisanitas, Coomeva, Allianz, etc.)
+    - Aseguradoras, SOAT, ARL y pólizas internacionales
+    - Preguntas del tipo '¿atienden con mi EPS?', '¿tienen convenio con X?'
+    - Servicios de apoyo (banco de sangre, capilla, restaurante, parqueadero)
+    - Servicios digitales (telemedicina, App FVL Responde)
 
     NO uses esta herramienta para preguntas abiertas sobre tratamientos médicos,
     procedimientos clínicos, historia institucional narrativa o especialidades en

@@ -13,52 +13,78 @@ import pytest
 
 
 def _sample_data() -> dict:
-    """Devuelve un dict de datos estructurados mínimo para los tests."""
+    """Devuelve un dict de datos estructurados que replica la estructura real de fvl_info.json.
+
+    Usa la misma jerarquía anidada del JSON de producción para garantizar que los
+    tests validen el comportamiento real de _format_structured_data.
+    """
     return {
-        "razon_social": "Fundación Valle del Lili",
-        "nit": "890.303.394-7",
-        "año_fundacion": 1992,
-        "tipo_entidad": "IPS sin ánimo de lucro",
-        "director_medico": "Dr. Carlos Enrique Arango Aguirre",
-        "director_ejecutivo": "Dr. Juan Guillermo Ortiz Arboleda",
-        "sitio_web": "https://www.valledellili.org",
-        "contactos": {
-            "central": "+57 (2) 331 7000",
-            "urgencias": "+57 (2) 331 7001",
-            "citas": "+57 (2) 331 7007",
+        "informacion_corporativa": {
+            "nombre_legal": "Fundación Valle del Lili",
+            "nit": "890.303.394-7",
+            "naturaleza_juridica": "Entidad privada sin ánimo de lucro",
+            "pagina_web": "https://valledellili.org",
+            "ranking_reputacion": "Mejor clínica de Colombia según América Economía.",
+            "acreditaciones": [
+                "Acreditación en Salud con Excelencia (MinSalud)",
+                "Joint Commission International (JCI)",
+            ],
         },
-        "horarios": {
-            "urgencias": "24 horas al día, 7 días a la semana",
-            "consulta_externa": "Lunes a viernes 7:00–17:00",
+        "contactos_clave": {
+            "central_telefonica": "+57 (2) 331 7000",
+            "urgencias_directo": "+57 (2) 331 7001",
+            "citas_medicas": "+57 (2) 331 9090",
+            "whatsapp_citas": "+57 318 331 9090",
+            "email_informacion": "info@valledellili.org",
         },
-        "sedes": [
+        "horarios_atencion": {
+            "urgencias": "Atención 24 horas, 7 días a la semana",
+            "consulta_externa": "Lunes a viernes 7:00 AM – 5:00 PM",
+            "laboratorio_clinico": "Lunes a sábado 6:00 AM – 6:00 PM",
+        },
+        "sedes_y_ubicaciones": [
             {
-                "nombre": "Sede Principal",
-                "direccion": "Cl. 98 #18-49, Cali",
-                "telefono": "+57 (2) 331 7000",
-                "referencia": "Ciudad Jardín",
-            }
+                "nombre": "Sede Principal (Valle del Lili)",
+                "direccion": "Carrera 98 # 18 - 49, Cali",
+                "ciudad": "Cali",
+                "servicios_principales": "Alta complejidad, Urgencias, Hospitalización.",
+            },
+            {
+                "nombre": "Sede Limonar",
+                "direccion": "Carrera 70 # 18 - 75, Cali",
+                "ciudad": "Cali",
+                "servicios_principales": "Consulta externa, Medicina física.",
+            },
         ],
+        "convenios_eps_y_aseguradoras": {
+            "eps_regimen_contributivo": [
+                "Sura EPS (Convenio integral)",
+                "Sanitas EPS",
+                "Compensar",
+                "Nueva EPS (Alta complejidad)",
+            ],
+            "medicina_prepagada": [
+                "Colmédica",
+                "Medisanitas / Colsanitas",
+                "Allianz",
+            ],
+            "aseguradoras_y_otros": [
+                "SOAT (Atención inmediata por accidentes de tránsito)",
+                "ARL (Sura, Positiva, Bolivar, etc.)",
+            ],
+            "nota_importante": (
+                "Para EPS no listadas, la atención se centra en Urgencias Vitales "
+                "o servicios específicos de alta complejidad previa autorización."
+            ),
+        },
         "servicios_destacados": ["Cardiología", "Trasplantes", "Oncología"],
-        "acreditaciones": ["Joint Commission International (JCI)"],
-        "redes_sociales": {
-            "facebook": "https://www.facebook.com/FundacionValledelLili",
-            "instagram": "@fundacionvalledellili",
+        "servicios_de_apoyo": {
+            "capilla": "Piso 1, Sede Principal. Misas: Lunes-Viernes 6:00 PM.",
+            "parqueaderos": "Disponible en todas las sedes.",
         },
-        "metodos_pago": {
-            "modalidades": ["EPS en convenio", "Particular"],
-            "horario_caja": "Lunes a viernes 7:00–16:00",
+        "servicios_digitales": {
+            "telemedicina": "Disponible vía App FVL Responde.",
         },
-        "donaciones": {
-            "descripcion": "Entidad sin ánimo de lucro.",
-            "contacto": "donaciones@valledellili.org",
-        },
-        "preguntas_frecuentes": [
-            {
-                "pregunta": "¿Cuál es el NIT de la Fundación?",
-                "respuesta": "El NIT es 890.303.394-7.",
-            }
-        ],
     }
 
 
@@ -93,7 +119,7 @@ def test_get_fvl_structured_info_es_langchain_tool() -> None:
 
 
 def test_get_fvl_structured_info_incluye_nit(tmp_path: Path) -> None:
-    """get_fvl_structured_info devuelve el NIT de la institución."""
+    """get_fvl_structured_info devuelve el NIT de la institución desde informacion_corporativa."""
     settings = _make_settings(tmp_path)
 
     with patch("app_agent.tools.get_settings", return_value=settings):
@@ -104,7 +130,7 @@ def test_get_fvl_structured_info_incluye_nit(tmp_path: Path) -> None:
 
 
 def test_get_fvl_structured_info_incluye_telefono_central(tmp_path: Path) -> None:
-    """get_fvl_structured_info devuelve el teléfono central de contacto."""
+    """get_fvl_structured_info devuelve el teléfono central de contacto desde contactos_clave."""
     settings = _make_settings(tmp_path)
 
     with patch("app_agent.tools.get_settings", return_value=settings):
@@ -115,7 +141,7 @@ def test_get_fvl_structured_info_incluye_telefono_central(tmp_path: Path) -> Non
 
 
 def test_get_fvl_structured_info_incluye_horario_urgencias(tmp_path: Path) -> None:
-    """get_fvl_structured_info devuelve el horario de urgencias."""
+    """get_fvl_structured_info devuelve el horario de urgencias desde horarios_atencion."""
     settings = _make_settings(tmp_path)
 
     with patch("app_agent.tools.get_settings", return_value=settings):
@@ -126,47 +152,65 @@ def test_get_fvl_structured_info_incluye_horario_urgencias(tmp_path: Path) -> No
 
 
 def test_get_fvl_structured_info_incluye_direccion_sede(tmp_path: Path) -> None:
-    """get_fvl_structured_info incluye la dirección de la sede principal."""
+    """get_fvl_structured_info incluye la dirección de la sede principal desde sedes_y_ubicaciones."""
     settings = _make_settings(tmp_path)
 
     with patch("app_agent.tools.get_settings", return_value=settings):
         from app_agent.tools import get_fvl_structured_info
         result = get_fvl_structured_info.invoke({"query": "¿Dónde están ubicadas las sedes?"})
 
-    assert "Cl. 98 #18-49" in result
+    assert "Carrera 98" in result
 
 
-def test_get_fvl_structured_info_incluye_director(tmp_path: Path) -> None:
-    """get_fvl_structured_info devuelve el nombre del director médico."""
+def test_get_fvl_structured_info_incluye_acreditaciones(tmp_path: Path) -> None:
+    """get_fvl_structured_info devuelve las acreditaciones desde informacion_corporativa."""
     settings = _make_settings(tmp_path)
 
     with patch("app_agent.tools.get_settings", return_value=settings):
         from app_agent.tools import get_fvl_structured_info
-        result = get_fvl_structured_info.invoke({"query": "¿Quién es el director?"})
+        result = get_fvl_structured_info.invoke({"query": "¿Qué acreditaciones tiene la FVL?"})
 
-    assert "Arango Aguirre" in result
+    assert "JCI" in result or "Joint Commission" in result
 
 
-def test_get_fvl_structured_info_incluye_redes_sociales(tmp_path: Path) -> None:
-    """get_fvl_structured_info incluye las redes sociales de la FVL."""
+def test_get_fvl_structured_info_incluye_eps(tmp_path: Path) -> None:
+    """get_fvl_structured_info devuelve las EPS en convenio desde convenios_eps_y_aseguradoras.
+
+    Este es el caso de uso crítico: preguntas sobre cobertura de EPS deben responder
+    con la lista de convenios del JSON estructurado, no con la base vectorial.
+    """
     settings = _make_settings(tmp_path)
 
     with patch("app_agent.tools.get_settings", return_value=settings):
         from app_agent.tools import get_fvl_structured_info
-        result = get_fvl_structured_info.invoke({"query": "¿Cuáles son las redes sociales?"})
+        result = get_fvl_structured_info.invoke({"query": "¿Qué EPS tienen convenio?"})
 
-    assert "facebook" in result.lower() or "instagram" in result.lower()
+    assert "CONVENIOS, EPS Y ASEGURADORAS" in result
+    assert "Sura" in result
+    assert "Sanitas" in result
+    assert "Compensar" in result
 
 
-def test_get_fvl_structured_info_incluye_preguntas_frecuentes(tmp_path: Path) -> None:
-    """get_fvl_structured_info incluye la sección de preguntas frecuentes."""
+def test_get_fvl_structured_info_incluye_medicina_prepagada(tmp_path: Path) -> None:
+    """get_fvl_structured_info devuelve medicina prepagada desde convenios_eps_y_aseguradoras."""
     settings = _make_settings(tmp_path)
 
     with patch("app_agent.tools.get_settings", return_value=settings):
         from app_agent.tools import get_fvl_structured_info
-        result = get_fvl_structured_info.invoke({"query": "preguntas frecuentes"})
+        result = get_fvl_structured_info.invoke({"query": "¿Tienen convenio con medicina prepagada?"})
 
-    assert "PREGUNTAS FRECUENTES" in result
+    assert "Colmédica" in result or "Medisanitas" in result
+
+
+def test_get_fvl_structured_info_incluye_servicios_digitales(tmp_path: Path) -> None:
+    """get_fvl_structured_info devuelve información sobre telemedicina desde servicios_digitales."""
+    settings = _make_settings(tmp_path)
+
+    with patch("app_agent.tools.get_settings", return_value=settings):
+        from app_agent.tools import get_fvl_structured_info
+        result = get_fvl_structured_info.invoke({"query": "¿Tienen telemedicina?"})
+
+    assert "telemedicina" in result.lower() or "FVL Responde" in result
 
 
 # ── Tests de manejo de errores ────────────────────────────────────────────────
