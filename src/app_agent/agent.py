@@ -8,7 +8,6 @@ from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import InMemorySaver
 
-
 from app_agent.tools import get_fvl_structured_info, retrieve_fvl_knowledge
 from semantic_layer_fvl.config import get_settings
 
@@ -26,6 +25,7 @@ _AGENT_SYSTEM_PROMPT = (
     "  - NIT o identificación fiscal\n"
     "  - Nombres de directivos (director médico, director ejecutivo)\n"
     "  - Redes sociales, acreditaciones, métodos de pago, donaciones\n"
+    "  - EPS, convenios, aseguradoras, medicina prepagada, SOAT y preguntas frecuentes\n"
     "• retrieve_fvl_knowledge — Base de conocimiento vectorial. Úsala para:\n"
     "  - Preguntas abiertas sobre servicios médicos o especialidades\n"
     "  - Procedimientos clínicos, tratamientos, programas institucionales\n"
@@ -35,6 +35,8 @@ _AGENT_SYSTEM_PROMPT = (
     "1. SIEMPRE usa al menos una herramienta antes de responder cualquier pregunta institucional.\n"
     "2. Elige la herramienta según el tipo de consulta. Si combina datos concretos Y narrativa,\n"
     "   invoca ambas herramientas.\n"
+    "   Para preguntas sobre EPS, convenios, aseguradoras o métodos de pago, usa primero\n"
+    "   get_fvl_structured_info; no consultes ChromaDB salvo que el usuario pida contexto narrativo.\n"
     "3. Basa tu respuesta ÚNICAMENTE en la información recuperada por la(s) herramienta(s).\n"
     "4. Si ninguna herramienta devuelve información relevante, responde EXACTAMENTE:\n"
     "   'No encontré esa información en los documentos institucionales disponibles.'\n"
