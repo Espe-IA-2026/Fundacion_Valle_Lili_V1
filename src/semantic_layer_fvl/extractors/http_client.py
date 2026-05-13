@@ -85,6 +85,7 @@ class HttpClient:
             headers=self._build_default_headers(),
             timeout=self.settings.request_timeout,
             transport=transport,
+            verify=False,  # Windows: el almacén de certs del SO no es accesible por defecto
         )
 
     def get(self, url: str) -> httpx.Response:

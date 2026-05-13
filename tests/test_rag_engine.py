@@ -8,7 +8,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 from langchain_core.messages import AIMessage, ToolMessage
 
-
 # ── Fixture: resetear singleton entre tests ───────────────────────────────────
 
 
@@ -162,6 +161,54 @@ def test_stream_agent_response_pasa_thread_id_en_config() -> None:
 
     config_passed = mock_agent.stream.call_args.args[1]
     assert config_passed == {"configurable": {"thread_id": "uuid-sesion-xyz"}}
+
+
+def test_stream_agent_response_eps_usa_json_sin_construir_agente() -> None:
+    """Las consultas sobre EPS se resuelven con datos estructurados, no con ChromaDB."""
+    structured_info = (
+        "PREGUNTAS FRECUENTES:\n"
+        "  P: ¿Qué EPS tienen convenio con la FVL?\n"
+        "  R: La FVL atiende pacientes de múltiples EPS. Para verificar su EPS específica, "
+        "comuníquese al +57 (2) 331 7000.\n"
+    )
+    mock_structured_tool = MagicMock()
+    mock_structured_tool.invoke.return_value = structured_info
+
+    with (
+        patch("app_agent.engine.get_fvl_structured_info", mock_structured_tool),
+        patch("app_agent.engine.build_rag_agent") as mock_build,
+    ):
+        from app_agent.engine import stream_agent_response
+        results = list(stream_agent_response("¿Qué EPS tienen convenio?", "thread-abc"))
+
+    assert len(results) == 1
+    assert "múltiples EPS" in results[0]
+    assert "_Fuente: datos institucionales_" in results[0]
+    mock_structured_tool.invoke.assert_called_once_with({"query": "¿Qué EPS tienen convenio?"})
+    mock_build.assert_not_called()
+
+
+def test_stream_agent_events_eps_emite_tool_estructurada_sin_rag() -> None:
+    """La UI debe mostrar la tool estructurada cuando la pregunta es sobre EPS."""
+    structured_info = (
+        "PREGUNTAS FRECUENTES:\n"
+        "  P: ¿Qué EPS tienen convenio con la FVL?\n"
+        "  R: La FVL atiende pacientes de múltiples EPS.\n"
+    )
+    mock_structured_tool = MagicMock()
+    mock_structured_tool.invoke.return_value = structured_info
+
+    with (
+        patch("app_agent.engine.get_fvl_structured_info", mock_structured_tool),
+        patch("app_agent.engine.build_rag_agent") as mock_build,
+    ):
+        from app_agent.engine import stream_agent_events
+        events = list(stream_agent_events("EPS en convenio", "thread-abc"))
+
+    assert events[0] == {"type": "thought", "tool": "get_fvl_structured_info", "text": ""}
+    assert events[1]["type"] == "answer"
+    assert "múltiples EPS" in events[1]["text"]
+    mock_build.assert_not_called()
 
 
 def test_stream_agent_response_yield_mensaje_error_en_excepcion() -> None:

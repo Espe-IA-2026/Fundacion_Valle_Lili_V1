@@ -98,6 +98,13 @@ class Settings(BaseSettings):
             return self.runs_dir
         return (self.project_root / self.runs_dir).resolve()
 
+    @property
+    def resolved_structured_data_path(self) -> Path:
+        """Ruta absoluta al archivo JSON de datos estructurados de la FVL."""
+        if self.structured_data_path.is_absolute():
+            return self.structured_data_path
+        return (self.project_root / self.structured_data_path).resolve()
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

@@ -40,6 +40,9 @@ packages = ["src/semantic_layer_fvl","src/app","src/rag","src/app_agent"]
 [tool.pytest.ini_options]
 addopts = "-p no:cacheprovider"
 testpaths = ["tests"]
+filterwarnings = [
+    "ignore:The default value of `allowed_objects`:DeprecationWarning:langgraph",
+]
 
 [tool.ruff]
 line-length = 110

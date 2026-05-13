@@ -502,8 +502,10 @@ class WebCrawler:
         Returns:
             ``RawPage`` con el contenido procesado, o ``None`` en caso de error de red.
         """
+        import urllib3
         import requests as req_lib
 
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         normalized_url = _HTTP_URL_ADAPTER.validate_python(str(url))
         self.client.rate_limiter.wait()
         try:
@@ -511,6 +513,7 @@ class WebCrawler:
                 str(normalized_url),
                 headers=self._BROWSER_HEADERS,
                 timeout=self.settings.request_timeout,
+                verify=False,
             )
             response.raise_for_status()
         except Exception as exc:

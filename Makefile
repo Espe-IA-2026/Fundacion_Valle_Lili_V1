@@ -159,7 +159,7 @@ rebuild-index:
 # =============================================================================
 app: limpiar
 	@echo [APP] Iniciando Asistente Virtual FVL en http://localhost:8501 ...
-	@uv run streamlit run src/app/main.py
+	@uv run python -m streamlit run src/app/main.py
 
 # =============================================================================
 #  TESTS Y CALIDAD DE CODIGO

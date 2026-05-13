@@ -13,7 +13,7 @@ from pathlib import Path
 import streamlit as st
 from dotenv import load_dotenv
 
-from app_agent.engine import stream_agent_response
+from app_agent.engine import stream_agent_events
 
 load_dotenv()
 
@@ -51,6 +51,7 @@ _CSS = """
 }
 .stApp {
     background-color: var(--fvl-bg);
+    color: #1A202C !important;
 }
 
 /* ── Headings ── */
@@ -93,12 +94,12 @@ button[data-baseweb="tab"][aria-selected="true"] {
     background-color: var(--fvl-primary-mid) !important;
 }
 
-/* ── Botones normales ── */
+/* ── Botones de ejemplo (queries rápidas) ── */
 .stButton > button {
     border-radius: var(--radius) !important;
     border: 1.5px solid var(--fvl-border) !important;
     color: var(--fvl-gray) !important;
-    background: var(--fvl-white) !important;
+    background-color: var(--fvl-white) !important;
     font-weight: 500 !important;
     font-size: 0.82rem !important;
     transition: all 0.2s !important;
@@ -107,7 +108,20 @@ button[data-baseweb="tab"][aria-selected="true"] {
 .stButton > button:hover {
     border-color: var(--fvl-blue) !important;
     color: var(--fvl-blue) !important;
-    background: var(--fvl-teal-bg) !important;
+    background-color: var(--fvl-teal-bg) !important;
+}
+
+/* ── Botón limpiar (wrapper .btn-clear) ── */
+.btn-clear button {
+    border: 1.5px solid #FECACA !important;
+    color: #991B1B !important;
+    background-color: #FEF2F2 !important;
+    font-weight: 600 !important;
+}
+.btn-clear button:hover {
+    background-color: #FEE2E2 !important;
+    border-color: #F87171 !important;
+    color: #7F1D1D !important;
 }
 
 /* ── Botón de descarga ── */
@@ -130,9 +144,16 @@ button[data-baseweb="tab"][aria-selected="true"] {
     background: var(--fvl-white) !important;
     margin-bottom: 0.5rem !important;
     box-shadow: var(--shadow) !important;
+    color: #1A202C !important;
+}
+[data-testid="stChatMessage"] p,
+[data-testid="stChatMessage"] li,
+[data-testid="stChatMessage"] span,
+[data-testid="stChatMessage"] div {
+    color: #1A202C !important;
 }
 
-/* ── Chat input (inner div) ── */
+/* ── Chat input (contenedor y textarea) ── */
 [data-testid="stChatInput"] > div {
     border-radius: var(--radius) !important;
     border: 1.5px solid var(--fvl-border) !important;
@@ -143,22 +164,47 @@ button[data-baseweb="tab"][aria-selected="true"] {
     border-color: var(--fvl-blue) !important;
     box-shadow: 0 0 0 3px rgba(0,122,255,0.12) !important;
 }
+/* Forzar fondo blanco y texto oscuro en el textarea */
+[data-testid="stChatInput"] textarea,
+[data-testid="stChatInput"] input {
+    background: var(--fvl-white) !important;
+    color: #1A202C !important;
+    caret-color: var(--fvl-primary) !important;
+}
+[data-testid="stChatInput"] textarea::placeholder,
+[data-testid="stChatInput"] input::placeholder {
+    color: #9CA3AF !important;
+    opacity: 1 !important;
+}
+/* Botón enviar (flecha) dentro del chat input */
+[data-testid="stChatInputSubmitButton"] {
+    background-color: var(--fvl-blue) !important;
+    border-radius: 8px !important;
+    border: none !important;
+    opacity: 1 !important;
+}
+[data-testid="stChatInputSubmitButton"]:hover {
+    background-color: #005FCC !important;
+    opacity: 1 !important;
+}
+[data-testid="stChatInputSubmitButton"] svg,
+[data-testid="stChatInputSubmitButton"] svg path {
+    fill: #FFFFFF !important;
+    color: #FFFFFF !important;
+    stroke: #FFFFFF !important;
+}
 
-/* ── Chat input fijo en la parte inferior ── */
-section[data-testid="stChatInput"] {
-    position: fixed !important;
-    bottom: 0 !important;
-    left: 244px !important;
-    right: 0 !important;
-    z-index: 999 !important;
-    background: var(--fvl-bg) !important;
-    padding: 0.75rem 1.5rem 1rem !important;
-    border-top: 1px solid var(--fvl-border) !important;
+/* ── Barra inferior (contenedor de Streamlit + chat input) ── */
+[data-testid="stBottomBlockContainer"] {
+    background: #F5F7FA !important;
+    border-top: 1px solid #C5D8D9 !important;
     box-shadow: 0 -2px 12px rgba(0,0,0,0.06) !important;
 }
-/* Sidebar colapsado */
-[data-testid="stSidebar"][aria-expanded="false"] ~ .main section[data-testid="stChatInput"] {
-    left: 0 !important;
+section[data-testid="stChatInput"] {
+    background: #F5F7FA !important;
+}
+footer {
+    background: #F5F7FA !important;
 }
 
 /* ── Text inputs ── */
@@ -300,34 +346,45 @@ def _render_sidebar() -> None:
 
         # ── Guía de uso ───────────────────────────────────────────────────
         st.markdown(
-            "<p style='font-size:0.82rem;font-weight:700;color:var(--fvl-primary);"
+            "<p style='font-size:0.82rem;font-weight:700;color:#023739;"
             "text-transform:uppercase;letter-spacing:0.06em;margin:1.25rem 0 0.5rem;'>Cómo usar</p>",
             unsafe_allow_html=True,
         )
         st.markdown(
             """
-            **🤖 Agente RAG — Recuperación semántica**
-            Consulta el índice vectorial ChromaDB para responder con fragmentos
-            exactos de los documentos institucionales de la FVL.
-            Mantiene memoria de la sesión activa.
+            <p style="font-size:0.88rem; color:#2D3748; margin:0 0 0.25rem;">
+                <strong>🤖 Agente RAG — Recuperación semántica</strong>
+            </p>
+            <p style="font-size:0.84rem; color:#5B6475; margin:0; line-height:1.5;">
+                Consulta el índice vectorial ChromaDB para responder con fragmentos
+                exactos de los documentos institucionales de la FVL.
+                Mantiene memoria de la sesión activa.
+            </p>
             """,
+            unsafe_allow_html=True,
         )
 
         st.markdown(
-            "<p style='font-size:0.82rem;font-weight:700;color:var(--fvl-primary);"
+            "<p style='font-size:0.82rem;font-weight:700;color:#023739;"
             "text-transform:uppercase;letter-spacing:0.06em;margin:1.25rem 0 0.5rem;'>Acerca de</p>",
             unsafe_allow_html=True,
         )
         st.markdown(
             """
-            Las respuestas se generan **exclusivamente** a partir de los documentos
-            institucionales. No se inventa ni extrapola información.
+            <p style="font-size:0.84rem; color:#5B6475; margin:0; line-height:1.5;">
+                Las respuestas se generan <strong>exclusivamente</strong> a partir de los documentos
+                institucionales. No se inventa ni extrapola información.
+            </p>
             """,
+            unsafe_allow_html=True,
         )
 
         st.divider()
-        st.caption("Módulo 2 — Agente RAG · ChromaDB")
-        st.caption("GPT-4o-mini · Fundación Valle del Lili · 2024–2025")
+        st.markdown(
+            "<p style='font-size:0.78rem; color:#5B6475; margin:0;'>Módulo 2 — Agente RAG · ChromaDB</p>"
+            "<p style='font-size:0.78rem; color:#5B6475; margin:0.2rem 0 0;'>GPT-4o-mini · Fundación Valle del Lili · 2026</p>",
+            unsafe_allow_html=True,
+        )
 
 
 def _render_rag_tab() -> None:
@@ -345,6 +402,8 @@ def _render_rag_tab() -> None:
         st.session_state.rag_thread_id = str(uuid.uuid4())
     if "rag_messages" not in st.session_state:
         st.session_state.rag_messages: list[dict] = []
+    # Sanear mensajes vacíos que pudieran haber quedado de errores previos
+    st.session_state.rag_messages = [m for m in st.session_state.rag_messages if m.get("content")]
 
     col_title, col_btn = st.columns([7, 1])
     with col_title:
@@ -356,10 +415,12 @@ def _render_rag_tab() -> None:
     with col_btn:
         st.markdown("<div style='margin-top:1.4rem;'></div>", unsafe_allow_html=True)
         if st.session_state.get("rag_messages"):
+            st.markdown('<div class="btn-clear">', unsafe_allow_html=True)
             if st.button("🗑️ Limpiar", key="clear_rag", help="Borrar conversación y reiniciar sesión"):
                 st.session_state.rag_messages = []
                 st.session_state.rag_thread_id = str(uuid.uuid4())
                 st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
 
     # Panel de bienvenida con ejemplos cuando el chat está vacío
     if not st.session_state.rag_messages:
@@ -394,8 +455,10 @@ def _render_rag_tab() -> None:
 
         st.markdown("")
 
-    # Renderizar historial de visualización
+    # Renderizar historial de visualización (omitir mensajes vacíos)
     for msg in st.session_state.rag_messages:
+        if not msg.get("content"):
+            continue
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
@@ -411,12 +474,29 @@ def _render_rag_tab() -> None:
         with st.chat_message("user"):
             st.markdown(user_input)
 
-        with st.chat_message("assistant"):
-            response = st.write_stream(
-                stream_agent_response(user_input, st.session_state.rag_thread_id)
-            )
+        tools_used: list[str] = []
+        response = ""
 
-        st.session_state.rag_messages.append({"role": "assistant", "content": response})
+        with st.chat_message("assistant"):
+            msg_placeholder = st.empty()
+
+            for event in stream_agent_events(user_input, st.session_state.rag_thread_id):
+                if event["type"] == "thought":
+                    tools_used.append(event["tool"])
+                elif event["type"] in ("answer", "error"):
+                    response = event["text"]
+                    msg_placeholder.markdown(response)
+
+            if tools_used:
+                _TOOL_LABELS = {
+                    "retrieve_fvl_knowledge": "📚 RAG — ChromaDB",
+                    "get_fvl_structured_info": "🗂️ Datos estructurados",
+                }
+                labels = " · ".join(_TOOL_LABELS.get(t, f"🔧 {t}") for t in tools_used)
+                st.caption(f"Herramienta(s) usada(s): {labels}")
+
+        if response:
+            st.session_state.rag_messages.append({"role": "assistant", "content": response})
 
 
 def main() -> None:
