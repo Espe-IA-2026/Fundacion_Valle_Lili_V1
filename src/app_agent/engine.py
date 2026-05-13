@@ -6,38 +6,46 @@ import logging
 from collections.abc import Iterator
 from typing import TypedDict
 
+from langchain_openai import ChatOpenAI
+
 from app_agent.agent import build_rag_agent
 from app_agent.tools import get_fvl_structured_info
+from semantic_layer_fvl.config import get_settings
 
 logger = logging.getLogger(__name__)
 
 # Singleton a nivel de módulo — None hasta la primera llamada a get_rag_agent().
 _agent = None
 
-_STRUCTURED_DIRECT_KEYWORDS = (
-    "eps",
-    "convenio",
-    "convenios",
-    "aseguradora",
-    "aseguradoras",
-    "medicina prepagada",
-    "prepagada",
-    "soat",
-    "metodo de pago",
-    "metodos de pago",
-    "método de pago",
-    "métodos de pago",
-    "forma de pago",
-    "formas de pago",
-)
-
-_EPS_DIRECT_KEYWORDS = (
-    "eps",
-    "convenio",
-    "convenios",
-    "aseguradora",
-    "aseguradoras",
-)
+# Keywords que activan el enrutamiento directo al JSON estructurado.
+# Se bypasea el ciclo ReACT del agente para estos casos deterministas.
+_STRUCTURED_DIRECT_KEYWORDS = frozenset([
+    # EPS y convenios
+    "eps", "convenio", "convenios", "aseguradora", "aseguradoras",
+    "medicina prepagada", "prepagada", "colmedica", "colmédica",
+    "medisanitas", "colsanitas", "coomeva", "sura", "sanitas",
+    "compensar", "nueva eps", "salud total", "allianz", "seguros bolivar",
+    "seguros bolívar", "soat", "arl", "ecopetrol", "poliza", "póliza",
+    # Horarios
+    "horario", "horarios", "hora de atención", "hora de atencion",
+    "atienden los sábados", "atienden los domingos",
+    # Contactos
+    "teléfono", "telefono", "número de teléfono", "numero de telefono",
+    "correo", "email", "whatsapp", "extensión", "extension",
+    "cómo los contacto", "cómo me comunico", "objetos perdidos", "pqrs",
+    # Sedes y ubicación
+    "sede", "sedes", "dirección", "direccion", "ubicación", "ubicacion",
+    "dónde están", "donde estan", "dónde queda", "donde queda",
+    # Datos institucionales
+    "nit", "razón social", "razon social", "naturaleza juridica", "naturaleza jurídica",
+    "acreditación", "acreditacion", "jci", "joint commission",
+    # Métodos de pago y servicios de apoyo
+    "método de pago", "metodo de pago", "métodos de pago", "metodos de pago",
+    "forma de pago", "formas de pago",
+    "parqueadero", "parqueaderos", "capilla", "restaurante", "banco de sangre",
+    # Servicios digitales
+    "telemedicina", "app fvl", "fvl responde",
+])
 
 
 def get_rag_agent(force_rebuild: bool = False):
@@ -66,80 +74,74 @@ def get_rag_agent(force_rebuild: bool = False):
 
 
 def _should_use_structured_direct_route(question: str) -> bool:
-    """Indica si la consulta debe resolverse contra el JSON estructurado."""
+    """Indica si la consulta debe resolverse contra el JSON estructurado.
+
+    Detecta keywords que identifican consultas sobre datos concretos (EPS,
+    horarios, contactos, sedes, NIT) y activa el enrutamiento determinista,
+    bypaseando el ciclo ReACT del agente para evitar errores de routing del LLM.
+    """
     normalized = question.casefold()
     return any(keyword in normalized for keyword in _STRUCTURED_DIRECT_KEYWORDS)
 
 
-def _extract_faq_answer(structured_info: str, keywords: tuple[str, ...]) -> str | None:
-    """Extrae una respuesta frecuente relevante desde el texto estructurado."""
-    lines = structured_info.splitlines()
-    for index, line in enumerate(lines):
-        normalized = line.casefold()
-        if line.strip().startswith("P:") and any(keyword in normalized for keyword in keywords):
-            for next_line in lines[index + 1:]:
-                stripped = next_line.strip()
-                if stripped.startswith("R:"):
-                    return stripped.removeprefix("R:").strip()
-                if stripped.startswith("P:"):
-                    break
-    return None
+def _synthesize_structured_answer(question: str, structured_info: str) -> str:
+    """Sintetiza una respuesta natural usando el LLM con los datos estructurados como contexto.
 
+    Se invoca cuando el pre-router detecta una consulta sobre datos concretos.
+    El LLM recibe los datos ya recuperados del JSON y solo necesita redactar
+    la respuesta, sin necesidad de elegir herramientas.
 
-def _extract_payment_modalities(structured_info: str) -> tuple[list[str], str | None]:
-    """Extrae modalidades y horario de caja desde la sección de métodos de pago."""
-    modalities: list[str] = []
-    cashier_hours: str | None = None
-    in_payment_section = False
+    Args:
+        question: Pregunta original del usuario.
+        structured_info: Datos formateados devueltos por get_fvl_structured_info.
 
-    for line in structured_info.splitlines():
-        stripped = line.strip()
-        if stripped == "MÉTODOS DE PAGO:":
-            in_payment_section = True
-            continue
-        if in_payment_section and not stripped:
-            break
-        if not in_payment_section:
-            continue
-        if stripped.startswith("- "):
-            modalities.append(stripped.removeprefix("- ").strip())
-        elif stripped.casefold().startswith("horario de caja:"):
-            cashier_hours = stripped.split(":", 1)[1].strip()
-
-    return modalities, cashier_hours
-
-
-def _build_direct_structured_answer(question: str, structured_info: str) -> str:
-    """Construye una respuesta breve con datos provenientes del JSON estructurado."""
+    Returns:
+        Respuesta sintetizada en lenguaje natural con cita de fuente.
+    """
     if structured_info.startswith(("No se encontró", "Error al leer")):
         return structured_info
 
-    normalized = question.casefold()
-    is_eps_query = any(keyword in normalized for keyword in _EPS_DIRECT_KEYWORDS)
-    faq_answer = _extract_faq_answer(structured_info, _EPS_DIRECT_KEYWORDS) if is_eps_query else None
-
-    if faq_answer:
-        body = faq_answer
-    else:
-        modalities, cashier_hours = _extract_payment_modalities(structured_info)
-        if modalities:
-            items = "\n".join(f"• {modality}" for modality in modalities)
-            body = f"La FVL registra estas modalidades de pago y aseguramiento:\n\n{items}"
-            if cashier_hours:
-                body += f"\n\nHorario de caja: {cashier_hours}."
-        else:
-            body = "No encontré esa información en los datos institucionales disponibles."
-
-    return f"{body}\n\n_Fuente: datos institucionales_"
+    settings = get_settings()
+    llm = ChatOpenAI(
+        model=settings.openai_model,
+        temperature=0.1,
+        api_key=settings.openai_api_key,
+    )
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "Eres el asistente virtual oficial de la Fundación Valle del Lili (FVL), "
+                "un hospital universitario de alta complejidad en Cali, Colombia. "
+                "Responde la pregunta del usuario usando ÚNCICAMENTE los datos institucionales proporcionados. "
+                "Sé claro, profesional y conciso. No inventes ni extrapoles datos. "
+                "Al final de tu respuesta incluye siempre: _Fuente: datos institucionales_"
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"DATOS INSTITUCIONALES DISPONIBLES:\n\n{structured_info}\n\n"
+                f"PREGUNTA: {question}"
+            ),
+        },
+    ]
+    try:
+        response = llm.invoke(messages)
+        return response.content
+    except Exception as exc:
+        logger.exception("Error al sintetizar respuesta estructurada: %s", exc)
+        # Fallback: devolver los datos crudos si el LLM falla
+        return f"{structured_info}\n\n_Fuente: datos institucionales_"
 
 
 def _get_direct_structured_answer(question: str) -> str | None:
-    """Devuelve una respuesta directa si la consulta pertenece al JSON estructurado."""
+    """Devuelve una respuesta sintetizada si la consulta pertenece al JSON estructurado."""
     if not _should_use_structured_direct_route(question):
         return None
 
     structured_info = get_fvl_structured_info.invoke({"query": question})
-    return _build_direct_structured_answer(question, structured_info)
+    return _synthesize_structured_answer(question, structured_info)
 
 
 def stream_agent_response(
@@ -239,7 +241,7 @@ def stream_agent_events(
     if _should_use_structured_direct_route(question):
         yield AgentEvent(type="thought", tool="get_fvl_structured_info", text="")
         structured_info = get_fvl_structured_info.invoke({"query": question})
-        answer = _build_direct_structured_answer(question, structured_info)
+        answer = _synthesize_structured_answer(question, structured_info)
         yield AgentEvent(type="answer", tool="", text=answer)
         return
 
