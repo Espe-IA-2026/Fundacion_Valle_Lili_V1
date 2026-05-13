@@ -1,8 +1,13 @@
 [project]
 name = "chatbot-fvl"
 version = "1.0.0"
-description = "Módulo 1 — Chatbot corporativo para la Fundación Valle del Lili (Context Stuffing, sin RAG)."
+description = "Asistente virtual con agente RAG para la Fundación Valle del Lili (FVL), Cali, Colombia."
 readme = "README.md"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Espe-IA-2026", email = "mateo.gonzalez_ruiz@uao.edu.co" },
+]
+keywords = ["chatbot", "rag", "langchain", "fundacion-valle-del-lili", "nlp"]
 requires-python = ">=3.11,<3.14"
 dependencies = [
     "beautifulsoup4>=4.12,<5.0",
