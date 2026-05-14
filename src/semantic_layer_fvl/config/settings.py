@@ -34,6 +34,14 @@ class Settings(BaseSettings):
     rag_score_threshold: float = Field(default=0.3, ge=0.0, le=1.0)
     agent_max_iterations: int = Field(default=6, ge=1)
 
+    # LangSmith — Observabilidad y trazabilidad
+    # Las variables LANGSMITH_* son leídas aquí y transferidas a os.environ
+    # por _configure_tracing() en app_agent/engine.py antes de compilar el agente.
+    langsmith_tracing: bool = False
+    langsmith_api_key: SecretStr | None = None
+    langsmith_project: str = "asistente-fvl"
+    langsmith_endpoint: str = "https://api.smith.langchain.com"
+
     # HTTP
     requests_per_second: float = Field(default=0.5, gt=0)
     request_timeout: int = Field(default=30, gt=0)

@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import Iterator
 from typing import TypedDict
 
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_openai import ChatOpenAI
 
 from app_agent.agent import build_rag_agent
@@ -48,12 +50,54 @@ _STRUCTURED_DIRECT_KEYWORDS = frozenset([
 ])
 
 
+def _configure_tracing() -> None:
+    """Transfiere la configuración de LangSmith desde Pydantic Settings a os.environ.
+
+    LangSmith lee las variables de entorno directamente de ``os.environ`` al momento
+    de inicializar el agente. Esta función actúa como puente entre el sistema de
+    configuración del proyecto (``Settings`` / ``.env`` / ``pydantic-settings``) y
+    el mecanismo de tracing de LangSmith, garantizando que las credenciales se
+    carguen de forma centralizada y tipada sin duplicar la lógica de lectura del ``.env``.
+
+    Solo activa el tracing si ``LANGSMITH_TRACING=true`` **y** se proporcionó
+    ``LANGSMITH_API_KEY``. Si falta alguno de los dos, registra un aviso y no altera
+    el entorno, por lo que la app sigue funcionando normalmente sin trazabilidad.
+
+    Llamar esta función exactamente una vez, antes de compilar el agente LangGraph
+    (``build_rag_agent()``), es suficiente porque el SDK de LangChain lee ``os.environ``
+    al primer uso de los callbacks de trazabilidad.
+    """
+    settings = get_settings()
+
+    if not settings.langsmith_tracing:
+        logger.debug("LangSmith tracing deshabilitado (LANGSMITH_TRACING=false).")
+        return
+
+    if settings.langsmith_api_key is None:
+        logger.warning(
+            "LANGSMITH_TRACING=true pero no se encontró LANGSMITH_API_KEY — "
+            "tracing desactivado. Agrega la clave en .env para habilitar observabilidad."
+        )
+        return
+
+    os.environ["LANGSMITH_TRACING"] = "true"
+    os.environ["LANGSMITH_API_KEY"] = settings.langsmith_api_key.get_secret_value()
+    os.environ["LANGSMITH_PROJECT"] = settings.langsmith_project
+    os.environ["LANGSMITH_ENDPOINT"] = settings.langsmith_endpoint
+
+    logger.info(
+        "LangSmith tracing activo — proyecto: '%s' · endpoint: %s",
+        settings.langsmith_project,
+        settings.langsmith_endpoint,
+    )
+
+
 def get_rag_agent(force_rebuild: bool = False):
     """Devuelve el agente RAG con lazy initialization (singleton).
 
-    La primera llamada construye el agente cargando el índice ChromaDB y
-    compilando el grafo LangGraph. Las llamadas siguientes devuelven la
-    instancia ya creada sin costo adicional.
+    La primera llamada configura LangSmith tracing, construye el agente cargando
+    el índice ChromaDB y compila el grafo LangGraph. Las llamadas siguientes
+    devuelven la instancia ya creada sin costo adicional.
 
     Args:
         force_rebuild: Si ``True``, descarta la instancia en caché y
@@ -66,11 +110,40 @@ def get_rag_agent(force_rebuild: bool = False):
     global _agent
 
     if _agent is None or force_rebuild:
+        _configure_tracing()
         logger.info("Construyendo agente RAG (primera inicialización)...")
         _agent = build_rag_agent()
         logger.info("Agente RAG listo.")
 
     return _agent
+
+
+def _save_exchange_to_memory(thread_id: str, question: str, answer: str) -> None:
+    """Registra un turno de conversación en el checkpointer del agente.
+
+    Cuando la ruta directa al JSON estructurado resuelve una pregunta sin
+    pasar por el grafo LangGraph, el ``InMemorySaver`` no se actualiza
+    automáticamente. Esta función inyecta el par (pregunta, respuesta) en
+    el checkpoint del hilo ``thread_id`` usando ``graph.update_state()``,
+    garantizando que el agente tenga contexto completo en los turnos siguientes.
+
+    Args:
+        thread_id: UUID de la sesión activa. Identifica el hilo en ``InMemorySaver``.
+        question: Mensaje original del usuario.
+        answer: Respuesta generada por la ruta directa.
+    """
+    try:
+        config = {"configurable": {"thread_id": thread_id}}
+        agent = get_rag_agent()
+        agent.update_state(
+            config,
+            {"messages": [HumanMessage(content=question), AIMessage(content=answer)]},
+        )
+        logger.debug("Turno de ruta directa guardado en memoria (thread=%s).", thread_id)
+    except Exception as exc:
+        logger.warning(
+            "No se pudo registrar el turno de ruta directa en el checkpointer: %s", exc
+        )
 
 
 def _should_use_structured_direct_route(question: str) -> bool:
@@ -113,7 +186,8 @@ def _synthesize_structured_answer(question: str, structured_info: str) -> str:
             "content": (
                 "Eres el asistente virtual oficial de la Fundación Valle del Lili (FVL), "
                 "un hospital universitario de alta complejidad en Cali, Colombia. "
-                "Responde la pregunta del usuario usando ÚNCICAMENTE los datos institucionales proporcionados. "
+                "Responde la pregunta del usuario usando ÚNICAMENTE los datos institucionales "
+                "proporcionados. "
                 "Sé claro, profesional y conciso. No inventes ni extrapoles datos. "
                 "Al final de tu respuesta incluye siempre: _Fuente: datos institucionales_"
             ),
@@ -168,6 +242,7 @@ def stream_agent_response(
     """
     direct_answer = _get_direct_structured_answer(question)
     if direct_answer:
+        _save_exchange_to_memory(thread_id, question, direct_answer)
         yield direct_answer
         return
 
@@ -242,6 +317,7 @@ def stream_agent_events(
         yield AgentEvent(type="thought", tool="get_fvl_structured_info", text="")
         structured_info = get_fvl_structured_info.invoke({"query": question})
         answer = _synthesize_structured_answer(question, structured_info)
+        _save_exchange_to_memory(thread_id, question, answer)
         yield AgentEvent(type="answer", tool="", text=answer)
         return
 

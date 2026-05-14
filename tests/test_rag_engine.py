@@ -164,7 +164,12 @@ def test_stream_agent_response_pasa_thread_id_en_config() -> None:
 
 
 def test_stream_agent_response_eps_usa_json_sin_construir_agente() -> None:
-    """Las consultas sobre EPS se resuelven con datos estructurados, no con ChromaDB."""
+    """Las consultas sobre EPS se resuelven con datos estructurados y guardan el turno en memoria.
+
+    La ruta directa al JSON resuelve la pregunta sin invocar ChromaDB, pero sí
+    necesita el agente para llamar a ``update_state`` y persistir el intercambio
+    en el checkpointer, garantizando continuidad en la conversación.
+    """
     structured_info = (
         "PREGUNTAS FRECUENTES:\n"
         "  P: ¿Qué EPS tienen convenio con la FVL?\n"
@@ -185,11 +190,21 @@ def test_stream_agent_response_eps_usa_json_sin_construir_agente() -> None:
     assert "múltiples EPS" in results[0]
     assert "_Fuente: datos institucionales_" in results[0]
     mock_structured_tool.invoke.assert_called_once_with({"query": "¿Qué EPS tienen convenio?"})
-    mock_build.assert_not_called()
+    # El agente se recupera para guardar el turno en el checkpointer (memoria de sesión)
+    mock_build.assert_called_once()
+    update_call = mock_build.return_value.update_state.call_args
+    assert update_call.args[0] == {"configurable": {"thread_id": "thread-abc"}}
+    assert len(update_call.args[1]["messages"]) == 2  # HumanMessage + AIMessage
 
 
 def test_stream_agent_events_eps_emite_tool_estructurada_sin_rag() -> None:
-    """La UI debe mostrar la tool estructurada cuando la pregunta es sobre EPS."""
+    """La ruta estructurada emite thought + answer y persiste el turno en el checkpointer.
+
+    La UI recibe primero un evento ``thought`` con la herramienta elegida
+    y luego un evento ``answer`` con la respuesta. Adicionalmente, el agente
+    es recuperado para guardar el intercambio en ``InMemorySaver`` vía
+    ``update_state``, preservando la continuidad de la conversación.
+    """
     structured_info = (
         "PREGUNTAS FRECUENTES:\n"
         "  P: ¿Qué EPS tienen convenio con la FVL?\n"
@@ -208,7 +223,11 @@ def test_stream_agent_events_eps_emite_tool_estructurada_sin_rag() -> None:
     assert events[0] == {"type": "thought", "tool": "get_fvl_structured_info", "text": ""}
     assert events[1]["type"] == "answer"
     assert "múltiples EPS" in events[1]["text"]
-    mock_build.assert_not_called()
+    # El agente se recupera para persistir el turno en el checkpointer (memoria de sesión)
+    mock_build.assert_called_once()
+    update_call = mock_build.return_value.update_state.call_args
+    assert update_call.args[0] == {"configurable": {"thread_id": "thread-abc"}}
+    assert len(update_call.args[1]["messages"]) == 2  # HumanMessage + AIMessage
 
 
 def test_stream_agent_response_yield_mensaje_error_en_excepcion() -> None:
