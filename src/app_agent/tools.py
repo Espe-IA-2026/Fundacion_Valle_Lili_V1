@@ -79,12 +79,19 @@ def retrieve_fvl_knowledge(query: str) -> str:
     parts: list[str] = []
     for i, doc in enumerate(docs, start=1):
         slug = doc.metadata.get("slug", "desconocido")
+        title = doc.metadata.get("title", "")
         category = doc.metadata.get("category", "")
+        total_chunks = doc.metadata.get("total_chunks", 1)
+        chunk_idx = doc.metadata.get("chunk_index", 0)
         # Eliminar prefijo numérico "02_" → "servicios"
         category_clean = category.split("_", 1)[-1] if "_" in category else category
-        header = f"[Fragmento {i} — {slug}"
+        # Mostrar título si existe y es distinto al slug para facilitar la cita
+        display = title if title and title.lower() != slug else slug
+        header = f"[Fragmento {i} — {display}"
         if category_clean:
             header += f" ({category_clean})"
+        if isinstance(total_chunks, int) and total_chunks > 1:
+            header += f" parte {chunk_idx + 1}/{total_chunks}"
         header += "]"
         parts.append(f"{header}\n{doc.page_content}")
 

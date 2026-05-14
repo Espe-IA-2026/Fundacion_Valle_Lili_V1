@@ -17,9 +17,31 @@ logger = logging.getLogger(__name__)
 _FRONTMATTER_RE = re.compile(r"^---[\s\S]*?---\s*\n")
 _FRONTMATTER_FIELDS_RE = re.compile(r"^---([\s\S]*?)---", re.MULTILINE)
 
+# Etiquetas legibles por categoría para el prefijo de contexto de cada chunk.
+# Convierte códigos internos ("02_servicios") en términos semánticos que
+# mejoran la precisión de los embeddings en búsquedas factuales.
+_CATEGORY_LABELS: dict[str, str] = {
+    "01_organizacion": "Información Institucional",
+    "02_servicios": "Servicios Médicos",
+    "03_talento_humano": "Directorio de Especialistas",
+    "04_sedes_ubicaciones": "Sedes y Ubicaciones",
+    "09_noticias": "Noticias y Novedades",
+    "10_multimedia": "Contenido Multimedia",
+}
+
+# Longitud mínima del cuerpo (sin frontmatter) para que un documento sea indexado.
+# Evita almacenar chunks vacíos o con solo títulos que no aportan valor semántico.
+_MIN_BODY_CHARS = 60
+
 
 class KnowledgeIndexer:
-    """Indexa los documentos Markdown del knowledge base en ChromaDB."""
+    """Indexa los documentos Markdown del knowledge base en ChromaDB.
+
+    Aplica *contextual enrichment*: cada chunk incluye un prefijo con el nombre
+    de la institución, la categoría y el título del documento de origen. Esto
+    mejora la precisión del embedding especialmente en documentos cortos (p.ej.
+    perfiles de especialistas) donde el cuerpo por sí solo carece de contexto.
+    """
 
     COLLECTION_NAME = "fvl_knowledge"
 
@@ -31,7 +53,7 @@ class KnowledgeIndexer:
             model=settings.embedding_model,
             api_key = settings.openai_api_key,
         )
-        self._chunker = TextChunker(max_chunk_size=1000, chunk_overlap=200)
+        self._chunker = TextChunker(max_chunk_size=900, chunk_overlap=150)
         self._db: Chroma | None = None
 
     def build_or_load(self, force: bool = False) -> Chroma:
@@ -85,12 +107,19 @@ class KnowledgeIndexer:
     def _load_documents(self) -> list[Document]:
         """Carga todos los archivos .md del knowledge base y los fragmenta en chunks.
 
-        Para cada archivo: extrae el frontmatter YAML, sanitiza los metadatos
-        para compatibilidad con ChromaDB, divide el cuerpo en chunks solapados
-        y construye un objeto ``Document`` por cada fragmento.
+        Para cada archivo:
+        1. Extrae el frontmatter YAML y sanea los metadatos para ChromaDB.
+        2. Filtra documentos con cuerpo demasiado corto (< ``_MIN_BODY_CHARS``).
+        3. Construye un prefijo de contexto institucional con título y categoría.
+        4. Divide el cuerpo en chunks solapados y añade el prefijo a cada uno.
+
+        El prefijo de contexto (*contextual enrichment*) garantiza que incluso
+        chunks cortos (p.ej. perfiles de especialistas con solo keywords)
+        contengan suficiente información institucional para producir embeddings
+        semánticamente precisos.
 
         Returns:
-            Lista de ``Document`` con contenido y metadatos listos para indexar.
+            Lista de ``Document`` enriquecidos con contenido y metadatos.
 
         Raises:
             ValueError: Si no hay archivos ``.md`` en ``knowledge_dir``.
@@ -104,18 +133,87 @@ class KnowledgeIndexer:
             )
 
         docs: list[Document] = []
+        skipped = 0
         for path in md_files:
             raw = path.read_text(encoding="utf-8")
             raw_metadata = self._parse_frontmatter(raw)
             metadata = self._sanitize_metadata(raw_metadata)
             body = _FRONTMATTER_RE.sub("", raw).strip()
+
+            # Omitir documentos con contenido insuficiente
+            if len(body) < _MIN_BODY_CHARS:
+                logger.debug(
+                    "Documento omitido (cuerpo < %d chars): %s", _MIN_BODY_CHARS, path.name
+                )
+                skipped += 1
+                continue
+
+            context_prefix = self._build_context_prefix(raw_metadata)
             chunks = self._chunker.chunk(body)
+            total = len(chunks)
+
             for i, chunk in enumerate(chunks):
+                # Prepend institutional context so every chunk carries its origin
+                enriched = f"{context_prefix}\n\n{chunk}" if context_prefix else chunk
                 docs.append(Document(
-                    page_content=chunk,
-                    metadata={**metadata, "chunk_index": i, "source_file": str(path)},
+                    page_content=enriched,
+                    metadata={
+                        **metadata,
+                        "chunk_index": i,
+                        "total_chunks": total,
+                        "source_file": str(path),
+                    },
                 ))
+
+        if skipped:
+            logger.info(
+                "Documentos omitidos (contenido insuficiente): %d de %d",
+                skipped, len(md_files),
+            )
+        logger.info(
+            "Documentos indexados: %d | Chunks generados: %d",
+            len(md_files) - skipped, len(docs),
+        )
         return docs
+
+    @staticmethod
+    def _build_context_prefix(raw_metadata: dict) -> str:
+        """Construye el prefijo de contexto institucional para enriquecer cada chunk.
+
+        Formato: ``Fundación Valle del Lili | {etiqueta_categoría} | {título}``
+
+        Este prefijo permite al modelo de embeddings anclar semánticamente
+        cada fragmento a su documento de origen sin necesidad de ver el
+        frontmatter completo. Es especialmente valioso para documentos cortos
+        (perfiles de especialistas, noticias) donde el cuerpo solo contiene
+        términos médicos sin contexto institucional.
+
+        Ejemplo para especialista:
+            ``Fundación Valle del Lili | Directorio de Especialistas | Dr. Juan Pérez``
+
+        Ejemplo para servicio:
+            ``Fundación Valle del Lili | Servicios Médicos | Cardiología``
+
+        Args:
+            raw_metadata: Diccionario del frontmatter YAML del documento.
+
+        Returns:
+            Cadena de prefijo contextual lista para anteponer al chunk.
+        """
+        title = raw_metadata.get("title", "")
+        category = str(raw_metadata.get("category", ""))
+        category_label = _CATEGORY_LABELS.get(
+            category,
+            category.split("_", 1)[-1].capitalize() if "_" in category else category,
+        )
+
+        parts = ["Fundación Valle del Lili"]
+        if category_label:
+            parts.append(category_label)
+        if title:
+            parts.append(title)
+
+        return " | ".join(parts)
 
     def _sanitize_metadata(self, raw: dict) -> dict:
         """Convierte los valores del frontmatter a tipos aceptados por ChromaDB.
