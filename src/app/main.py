@@ -357,7 +357,7 @@ def _render_sidebar() -> None:
 
         # ── Estado del sistema ────────────────────────────────────────────
         st.markdown(
-            "<p style='font-size:0.72rem;font-weight:700;color:rgba(255,255,255,0.5);'
+            "<p style='font-size:0.72rem;font-weight:700;color:rgba(255,255,255,0.5);"
             "text-transform:uppercase;letter-spacing:0.1em;margin:0 0 0.75rem;'>Estado del sistema</p>",
             unsafe_allow_html=True,
         )
@@ -389,7 +389,7 @@ def _render_sidebar() -> None:
 
         # ── Guía de uso ───────────────────────────────────────────────────
         st.markdown(
-            "<p style='font-size:0.72rem;font-weight:700;color:rgba(255,255,255,0.5);'
+            "<p style='font-size:0.72rem;font-weight:700;color:rgba(255,255,255,0.5);"
             "text-transform:uppercase;letter-spacing:0.1em;margin:0 0 0.75rem;'>Capacidades</p>",
             unsafe_allow_html=True,
         )
