@@ -1,12 +1,21 @@
-"""Extractor de URLs desde archivos sitemap XML de dominios configurados."""
+"""Extractor de URLs desde archivos sitemap XML de dominios configurados.
+
+Si los sitemaps no existen o no devuelven URLs válidas, el extractor cae en un
+mecanismo de descubrimiento que descarga las páginas de fallback y extrae todos
+los enlaces internos que cumplan los filtros del dominio. Esto garantiza que el
+pipeline siempre rastrea páginas individuales (e.g. ``/servicios/cardiologia/``)
+en lugar de quedarse solo en la página de listado.
+"""
 
 from __future__ import annotations
 
 import logging
 import xml.etree.ElementTree as ET
 from typing import TYPE_CHECKING
+from urllib.parse import urljoin, urlsplit
 
 import requests
+from bs4 import BeautifulSoup
 
 if TYPE_CHECKING:
     from semantic_layer_fvl.domains import DomainConfig
@@ -28,9 +37,10 @@ _SITEMAP_NS = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
 def fetch_domain_urls(base_url: str, config: DomainConfig) -> list[str]:
     """Devuelve las URLs filtradas del sitemap XML de un dominio configurado.
 
-    Intenta cada ruta en ``config.sitemap_paths`` con cabeceras de navegador.
-    Si todos los sitemaps fallan o todas las URLs son filtradas, utiliza
-    ``config.fallback_urls`` como respaldo.
+    Orden de prioridad:
+    1. Sitemap XML configurado en ``config.sitemap_paths``.
+    2. Descubrimiento de enlaces desde las páginas de fallback (BFS de nivel 1).
+    3. Las propias ``config.fallback_urls`` como último recurso.
 
     Args:
         base_url: URL base del sitio (sin barra final).
@@ -51,12 +61,94 @@ def fetch_domain_urls(base_url: str, config: DomainConfig) -> list[str]:
             return filtered
         logger.debug("[sitemap] %s → all %d URLs excluded by filters", path, len(urls))
 
+    # Sitemap no disponible — intentar descubrimiento desde las páginas de fallback
+    discovered = _discover_urls_from_pages(config.fallback_urls, base_url, config)
+    if discovered:
+        logger.info(
+            "[sitemap] Descubiertas %d URLs desde páginas de fallback para dominio '%s'",
+            len(discovered),
+            config.name,
+        )
+        return discovered
+
+    # Último recurso: devolver las fallback_urls tal cual
     logger.warning(
-        "[sitemap] All sitemap paths failed for domain '%s' — using %d fallback URL(s)",
+        "[sitemap] Sitemap y descubrimiento fallaron para '%s' — usando %d fallback URL(s)",
         config.name,
         len(config.fallback_urls),
     )
     return list(config.fallback_urls)
+
+
+def _discover_urls_from_pages(
+    seed_urls: list[str],
+    base_url: str,
+    config: DomainConfig,
+) -> list[str]:
+    """Descarga las seed_urls y extrae todos los enlaces internos que cumplan los filtros.
+
+    Realiza un BFS de nivel 1: solo sigue los enlaces directos de las seeds,
+    sin profundizar más. Excluye las propias seeds del resultado para evitar
+    re-rastrear páginas de listado como si fueran contenido.
+
+    Args:
+        seed_urls: URLs de las páginas de listado a analizar.
+        base_url: URL base del sitio para validar que los enlaces sean internos.
+        config: Configuración del dominio con filtros de inclusión/exclusión.
+
+    Returns:
+        Lista de URLs individuales filtradas, sin duplicados, listas para rastrear.
+    """
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+    base_netloc = urlsplit(base_url).netloc.lower()
+    discovered: set[str] = set()
+
+    for seed in seed_urls:
+        try:
+            resp = requests.get(
+                seed,
+                headers=_BROWSER_HEADERS,
+                timeout=20,
+                verify=False,  # Algunos servidores tienen certificados autofirmados
+            )
+            if resp.status_code != 200:
+                logger.debug("[sitemap] discover: %s → HTTP %d", seed, resp.status_code)
+                continue
+
+            soup = BeautifulSoup(resp.content, "html.parser")
+            for a_tag in soup.find_all("a", href=True):
+                href = str(a_tag["href"]).strip()
+                if not href or href.startswith(("#", "mailto:", "tel:", "javascript:")):
+                    continue
+
+                full_url = urljoin(seed, href).split("?")[0].split("#")[0].rstrip("/")
+                parsed = urlsplit(full_url)
+
+                if parsed.scheme not in {"http", "https"}:
+                    continue
+                if parsed.netloc.lower() != base_netloc:
+                    continue
+                if not parsed.path or parsed.path == "/":
+                    continue
+
+                discovered.add(full_url)
+
+            logger.debug(
+                "[sitemap] discover: %d enlaces encontrados en '%s'",
+                len(discovered),
+                seed,
+            )
+
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[sitemap] discover: error al procesar '%s': %s", seed, exc)
+
+    # Aplicar filtros del dominio y excluir las seeds para no re-rastrear listados
+    filtered = _apply_filters(list(discovered), config)
+    seeds_normalized = {u.rstrip("/") for u in seed_urls}
+    result = [u for u in filtered if u.rstrip("/") not in seeds_normalized]
+    return result
 
 
 def _parse_sitemap(url: str) -> list[str]:

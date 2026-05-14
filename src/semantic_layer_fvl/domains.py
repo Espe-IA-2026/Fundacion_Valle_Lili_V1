@@ -85,18 +85,30 @@ DOMAIN_CONFIGS: dict[str, DomainConfig] = {  # Configuraciones registradas por n
         container_selector="main",
         output_folder="sedes",
         category="04_sedes_ubicaciones",
-        url_include_patterns=["/sedes/", "/sede/", "/ubicaciones/"],
+        # Incluye rutas de sedes individuales y la página de listado de sedes
+        url_include_patterns=[
+            "/sedes/", "/sede/", "/ubicaciones/",
+            "/nuestras-sedes/",
+            "/nuestra-institucion/nuestras-sedes",
+        ],
         url_exclude_patterns=[],
         extra_metadata_selectors={
             "direccion": ".direccion, [class*='address'], table td:first-child",
             "horarios": ".horarios, [class*='schedule'], table",
         },
-        fallback_urls=["https://valledellili.org/nuestra-institucion/nuestras-sedes/"],
+        # Dos seeds: la página oficial de sedes y la de nuestra institución para
+        # descubrir enlaces a sedes individuales si el sitemap no existe.
+        fallback_urls=[
+            "https://valledellili.org/nuestra-institucion/nuestras-sedes/",
+            "https://valledellili.org/nuestra-institucion/",
+        ],
         trim_before_first_h1=True,
         markdown_cutoff_headings=[
+            "# Nuestra Historia",
             "## Noticias y novedades",
             "## Conoce otras sedes",
             "## ¿En qué tema de salud te podemos orientar hoy?",
+            "### Conozca más de la Fundación Valle del Lili",
             "### Autorización datos personales",
             "### Otros servicios y especialidades",
             "### Contenidos relacionados",
@@ -104,20 +116,33 @@ DOMAIN_CONFIGS: dict[str, DomainConfig] = {  # Configuraciones registradas por n
     ),
     "institucional": DomainConfig(
         name="institucional",
-        sitemap_paths=["page-sitemap.xml"],
+        sitemap_paths=["page-sitemap.xml", "pages-sitemap.xml"],
         container_selector="main",
         output_folder="institucional",
         category="01_organizacion",
+        # Patrones amplios para capturar historia, misión, calidad, investigación, etc.
         url_include_patterns=[
-            "/mision-valores-historia/",
+            "/nuestra-institucion/",
+            "/mision",
+            "/historia",
+            "/valores",
+            "/gestion-de-calidad",
+            "/investigacion",
+            "/impacto-social",
+            "/hospital-universitario",
+            "/sostenibilidad",
         ],
-        url_exclude_patterns=["/servicios/", "/especialistas/", "/sedes/"],
+        url_exclude_patterns=[
+            "/servicios/", "/directorio-medico/", "/nuestras-sedes/",
+        ],
         extra_metadata_selectors={},
         fallback_urls=[
             "https://valledellili.org/nuestra-institucion/",
         ],
         trim_before_first_h1=True,
         markdown_cutoff_headings=[
+            "### Conozca más de la Fundación Valle del Lili",
+            "### Autorización datos personales",
             "### Otros servicios y especialidades",
             "### Contenidos relacionados",
         ],
