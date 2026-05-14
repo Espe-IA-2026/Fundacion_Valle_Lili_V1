@@ -152,15 +152,26 @@ def _discover_urls_from_pages(
 
 
 def _parse_sitemap(url: str) -> list[str]:
-    """Descarga y parsea un sitemap XML, devolviendo la lista de ``<loc>`` encontradas."""
+    """Descarga y parsea un sitemap XML, devolviendo la lista de ``<loc>`` encontradas.
+
+    Usa ``verify=False`` para evitar fallos silenciosos en servidores con
+    certificados auto-firmados o cadenas SSL incompletas (misma estrategia que
+    ``WebCrawler.fetch_domain_page``). Las advertencias de urllib3 se suprimen
+    para mantener la salida del pipeline limpia.
+    """
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
     try:
-        resp = requests.get(url, headers=_BROWSER_HEADERS, timeout=20)
+        resp = requests.get(url, headers=_BROWSER_HEADERS, timeout=20, verify=False)
         if resp.status_code != 200:
             logger.debug("[sitemap] %s → HTTP %d", url, resp.status_code)
             return []
         root = ET.fromstring(resp.content)
         locs = root.findall(".//sm:url/sm:loc", _SITEMAP_NS)
-        return [loc.text.strip() for loc in locs if loc.text]
+        urls = [loc.text.strip() for loc in locs if loc.text]
+        logger.debug("[sitemap] %s → %d URLs en el sitemap", url, len(urls))
+        return urls
     except requests.RequestException as exc:
         logger.debug("[sitemap] Network error for %s: %s", url, exc)
         return []

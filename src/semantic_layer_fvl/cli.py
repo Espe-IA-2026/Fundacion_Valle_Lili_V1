@@ -191,8 +191,8 @@ def build_parser() -> argparse.ArgumentParser:
     crawl_domain_parser.add_argument(
         "--max-urls",
         type=int,
-        default=300,
-        help="Limite de URLs a procesar (default: 300).",
+        default=1000,
+        help="Limite de URLs a procesar (default: 1000).",
     )
     crawl_domain_parser.add_argument(
         "--write",
